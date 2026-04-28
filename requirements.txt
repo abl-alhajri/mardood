@@ -1,0 +1,42 @@
+# =============================================
+# MARDOOD — Python Dependencies
+# =============================================
+
+# Core
+anthropic>=0.25.0          # Claude API (the brain)
+python-dotenv>=1.0.0       # Load .env file
+
+# Data fetching — stocks
+yfinance>=0.2.40           # Yahoo Finance (free, no key needed)
+alpaca-py>=0.20.0          # Alpaca Markets API
+
+# Data fetching — crypto
+python-binance>=1.0.19     # Binance API
+pycoingecko>=3.1.0         # CoinGecko API (free tier available)
+
+# Technical analysis
+pandas-ta>=0.3.14b         # RSI, MACD, Bollinger, EMA and 130+ indicators
+pandas>=2.0.0
+numpy>=1.26.0
+
+# News & sentiment
+newsapi-python>=0.2.7      # NewsAPI
+requests>=2.31.0
+
+# Charts & reports
+plotly>=5.20.0             # Interactive charts
+kaleido>=0.2.1             # Save plotly charts as images
+
+# Alerts
+python-telegram-bot>=21.0  # Telegram notifications
+
+# Storage
+# SQLite is built into Python — no extra install needed
+
+# Scheduling (run Mardood on a timer)
+schedule>=1.2.1
+
+# Utilities
+pytz>=2024.1               # Timezone handling
+rich>=13.7.0               # Beautiful terminal output
+
