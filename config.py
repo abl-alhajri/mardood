@@ -81,11 +81,10 @@ CRYPTO_WATCHLIST = [
 
 # ─── Analysis Settings ────────────────────────────────────
 CLAUDE_MODEL                = "claude-sonnet-4-5"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.60
-MAX_POSITION_SIZE_PCT       = 0.10   # 10% لكل صفقة
-STOP_LOSS_PCT               = 0.02   # وقف خسارة 2%
-TAKE_PROFIT_PCT             = 0.08   # هدف ربح 8%
-
+SIGNAL_CONFIDENCE_THRESHOLD = 0.40
+MAX_POSITION_SIZE_PCT       = 0.30
+STOP_LOSS_PCT               = 0.05
+TAKE_PROFIT_PCT             = 0.25
 # ─── Intervals ────────────────────────────────────────────
 SCAN_INTERVAL_MINUTES = 30
 REPORT_TIME           = "08:00"
