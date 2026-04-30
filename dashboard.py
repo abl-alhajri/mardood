@@ -1,6 +1,7 @@
 """
 Mardood — Live Dashboard
 """
+import os
 from flask import Flask, jsonify, render_template_string
 import sqlite3
 import threading
@@ -341,4 +342,5 @@ def api_data():
 if __name__ == '__main__':
     print("Mardood Dashboard → http://localhost:5000")
     fetch_live_prices()
-    app.run(debug=False, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
