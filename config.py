@@ -19,24 +19,72 @@ TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID    = os.getenv("TELEGRAM_CHAT_ID")
 
 # ─── Watchlists ───────────────────────────────────────────
+
+# أسهم أمريكية (100 سهم)
 STOCKS_WATCHLIST = [
-    "AAPL", "MSFT", "NVDA", "TSLA", "AMZN",
-    "GOOGL", "META", "AMD", "PLTR", "SPY"
+    # Tech Giants
+    "AAPL", "MSFT", "NVDA", "GOOGL", "META", "AMZN", "TSLA", "AMD", "PLTR", "SPY",
+    # Semiconductors
+    "INTC", "QCOM", "AVGO", "MU", "AMAT", "KLAC", "LRCX", "ASML", "TSM", "ARM",
+    # Finance & Crypto Stocks
+    "JPM", "BAC", "GS", "MS", "V", "MA", "PYPL", "SQ", "COIN", "HOOD",
+    # AI & Cloud
+    "SMCI", "MSTR", "CRWD", "NET", "SNOW", "DDOG", "ZS", "PANW", "AI", "SOUN",
+    # ETFs
+    "QQQ", "IWM", "DIA", "SOXX", "ARKK",
+    # Energy
+    "XOM", "CVX", "OXY", "GLD", "SLV",
+    # Healthcare
+    "JNJ", "PFE", "MRNA", "ABBV", "UNH",
+    # Consumer
+    "NFLX", "DIS", "SBUX", "NKE", "MCD",
+    # Electric Vehicles
+    "RIVN", "LCID", "NIO", "LI", "XPEV",
+    # Space & Defense
+    "BA", "LMT", "RTX", "NOC", "SPCE",
+    # Small Cap Growth
+    "IONQ", "RGTI", "QUBT", "BBAI", "AEVA",
+    # Social Media
+    "SNAP", "PINS", "RDDT", "SPOT", "RBLX",
+    # Real Estate Tech
+    "UBER", "LYFT", "ABNB", "DASH", "GRAB",
+    # Biotech
+    "CRSP", "EDIT", "NTLA", "BEAM", "RXRX",
 ]
 
+# كريبتو رئيسي + ميم كوينز (50 عملة)
 CRYPTO_WATCHLIST = [
-    "BTCUSDT", "ETHUSDT", "SOLUSDT",
-    "BNBUSDT", "XRPUSDT",
-    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT",
-    "WIFUSDT", "BONKUSDT", "FLOKIUSDT"
+    # Layer 1 - الكبار
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+    "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", "MATICUSDT",
+    "ATOMUSDT", "NEARUSDT", "APTUSDT", "SUIUSDT", "SEIUSDT",
+
+    # Layer 2
+    "ARBUSDT", "OPUSDT", "STRKUSDT", "ZKUSDT", "IMXUSDT",
+
+    # DeFi
+    "UNIUSDT", "AAVEUSDT", "MKRUSDT", "CRVUSDT", "COMPUSDT",
+    "JUPUSDT", "RAYUSDT", "ORCAUSDT",
+
+    # AI & Data
+    "FETUSDT", "AGIXUSDT", "RNDRУСДТ", "INJUSDT", "TAOУСДТ",
+    "WLDUSDT", "OCEANUSDT",
+
+    # Meme Coins 🐸
+    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT",
+    "FLOKIUSDT", "MEMEUSDT", "BRETTUSDT", "MOGUSDT", "POPCAT",
+    "NEIROUSDT", "GOATUSDT", "PNUTUSDT", "ACTUSDT", "LUNCUSDT",
+
+    # Gaming & Metaverse
+    "AXSUSDT", "SANDUSDT", "MANAUSDT", "GALAUSDT", "ILVUSDT",
 ]
 
 # ─── Analysis Settings ────────────────────────────────────
-CLAUDE_MODEL                = "gemini-2.0-flash"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.65
-MAX_POSITION_SIZE_PCT       = 0.05
-STOP_LOSS_PCT               = 0.03
-TAKE_PROFIT_PCT             = 0.09
+CLAUDE_MODEL                = "claude-sonnet-4-5"
+SIGNAL_CONFIDENCE_THRESHOLD = 0.60
+MAX_POSITION_SIZE_PCT       = 0.10   # 10% لكل صفقة
+STOP_LOSS_PCT               = 0.02   # وقف خسارة 2%
+TAKE_PROFIT_PCT             = 0.08   # هدف ربح 8%
 
 # ─── Intervals ────────────────────────────────────────────
 SCAN_INTERVAL_MINUTES = 30
@@ -51,9 +99,3 @@ BASE_DIR    = pathlib.Path(__file__).parent
 MEMORY_DB   = BASE_DIR / "memory" / "mardood.db"
 LOGS_DIR    = BASE_DIR / "logs"
 REPORTS_DIR = BASE_DIR / "reports" / "output"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.60  # يقبل إشارات أكثر
-
-MAX_POSITION_SIZE_PCT = 0.10   # 15% لكل صفقة = 6-7 صفقات بنفس الوقت
-
-STOP_LOSS_PCT   = 0.02   # يوقف الخسارة بـ 2% سريع
-TAKE_PROFIT_PCT = 0.04   # ياخذ الربح بـ 4% سريع (نسبة 2:1)
