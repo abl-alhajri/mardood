@@ -5,6 +5,7 @@
 # Core
 anthropic>=0.25.0          # Claude API (the brain)
 python-dotenv>=1.0.0       # Load .env file
+flask>=3.0.0               # Web dashboard
 
 # Data fetching — stocks
 yfinance>=0.2.40           # Yahoo Finance (free, no key needed)
@@ -39,4 +40,3 @@ schedule>=1.2.1
 # Utilities
 pytz>=2024.1               # Timezone handling
 rich>=13.7.0               # Beautiful terminal output
-
