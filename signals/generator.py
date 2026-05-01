@@ -1,7 +1,8 @@
 """
-Mardood — Signal Generator with Full Context
+Mardood — Signal Generator with Rate Limiting for Gemini
 """
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from data.stocks.fetcher import get_stock_data
 from data.crypto.fetcher import get_crypto_ohlcv
@@ -13,6 +14,27 @@ from rich.console import Console
 
 console = Console()
 
+# Rate limiter — Gemini free tier: 15 requests/minute
+_rate_lock = threading.Semaphore(15)
+_request_times = []
+_times_lock = threading.Lock()
+
+def rate_limited_analyze(symbol, asset_type, indicators, news):
+    """Analyze with rate limiting to avoid Gemini 429 errors"""
+    with _times_lock:
+        now = time.time()
+        # Remove requests older than 60 seconds
+        _request_times[:] = [t for t in _request_times if now - t < 60]
+        # If at limit, wait
+        if len(_request_times) >= 14:
+            oldest = _request_times[0]
+            wait_time = 60 - (now - oldest) + 1
+            if wait_time > 0:
+                time.sleep(wait_time)
+        _request_times.append(time.time())
+
+    return analyze(symbol, asset_type, indicators, news)
+
 
 def scan_stock(ticker):
     try:
@@ -20,7 +42,7 @@ def scan_stock(ticker):
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         news = get_full_context(ticker, "stock")
-        signal = analyze(ticker, "stock", indicators, news)
+        signal = rate_limited_analyze(ticker, "stock", indicators, news)
         signal["symbol"] = ticker
         signal["asset_type"] = "stock"
         return signal
@@ -35,7 +57,7 @@ def scan_crypto(symbol):
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         news = get_full_context(symbol, "crypto")
-        signal = analyze(symbol, "crypto", indicators, news)
+        signal = rate_limited_analyze(symbol, "crypto", indicators, news)
         signal["symbol"] = symbol
         signal["asset_type"] = "crypto"
         return signal
@@ -53,9 +75,10 @@ def run_full_scan():
     for symbol in CRYPTO_WATCHLIST:
         tasks.append((scan_crypto, symbol))
 
-    console.print(f"[cyan]⚡ Scanning {len(tasks)} assets in parallel...[/cyan]")
+    console.print(f"[cyan]⚡ Scanning {len(tasks)} assets (rate-limited)...[/cyan]")
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    # Reduced workers to respect Gemini rate limits
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(fn, arg): arg for fn, arg in tasks}
         for future in as_completed(futures):
             symbol = futures[future]
