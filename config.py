@@ -1,5 +1,5 @@
-"""
-MARDOOD — Configuration
+ï»¿"""
+MARDOOD ï¿½ Configuration
 """
 import os
 import pathlib
