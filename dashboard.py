@@ -1,5 +1,5 @@
 """
-Mardood — Live Dashboard (SSE-powered, no page refresh)
+XYZTradingAE — Live Dashboard (SSE-powered, no page refresh)
 """
 import os
 import json
@@ -162,7 +162,7 @@ HTML = '''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Mardood Dashboard</title>
+<title>XYZTradingAE Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0a0e1a;color:#e2e8f0}
@@ -216,7 +216,7 @@ tr:last-child td{border-bottom:none}
 </head>
 <body>
 <div class="header">
-  <div class="logo">MARDOOD</div>
+  <div class="logo">XYZTRADINGAE</div>
   <div style="display:flex;align-items:center;gap:14px">
     <div class="live"><div class="dot" id="liveDot"></div><span id="liveLabel">Connecting...</span></div>
     <div id="timerBadge" style="font-size:11px;color:#64748b">connecting...</div>
@@ -595,6 +595,6 @@ threading.Thread(target=price_loop, daemon=True).start()
 
 
 if __name__ == '__main__':
-    print("Mardood Dashboard -> http://localhost:5000")
+    print("XYZTradingAE Dashboard -> http://localhost:5000")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

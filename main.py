@@ -1,5 +1,5 @@
 """
-MARDOOD — AI Trading Agent
+XYZTRADINGAE — AI Trading Agent
 """
 import argparse
 import schedule
@@ -21,7 +21,7 @@ console = Console()
 
 def print_banner():
     console.print(Panel.fit(
-        "[bold cyan]🤖  M A R D O O D[/bold cyan]\n"
+        "[bold cyan]🤖  X Y Z T R A D I N G A E[/bold cyan]\n"
         "[dim]AI Trading Agent — US Stocks & Crypto[/dim]\n"
         f"[dim]Phase {MARDOOD_PHASE} · {TIMEZONE}[/dim]",
         border_style="cyan"
@@ -107,13 +107,13 @@ def show_stats():
         f"[bold]✅ Wins:[/bold] {perf['wins']} | [bold]❌ Losses:[/bold] {perf['losses']}\n"
         f"[bold]🎯 Win Rate:[/bold] {perf['win_rate']}%\n"
         f"[bold]💹 Total P&L:[/bold] ${perf['total_pnl']}",
-        title="Mardood Performance",
+        title="XYZTradingAE Performance",
         border_style="cyan"
     ))
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mardood AI Trading Agent")
+    parser = argparse.ArgumentParser(description="XYZTradingAE AI Trading Agent")
     parser.add_argument("--once",  action="store_true", help="Run one scan and exit")
     parser.add_argument("--stats", action="store_true", help="Show performance stats")
     args = parser.parse_args()
@@ -129,7 +129,7 @@ def main():
         return
 
     schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(run_scan)
-    console.print(f"[green]✓ Mardood is live[/green] — scanning every {SCAN_INTERVAL_MINUTES} min")
+    console.print(f"[green]✓ XYZTradingAE is live[/green] — scanning every {SCAN_INTERVAL_MINUTES} min")
     console.print(f"[dim]Press Ctrl+C to stop[/dim]\n")
     run_scan()
 
@@ -142,4 +142,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        console.print("\n[yellow]Mardood stopped.[/yellow]")
+        console.print("\n[yellow]XYZTradingAE stopped.[/yellow]")
