@@ -27,6 +27,8 @@ INPUTS YOU RECEIVE EACH ANALYSIS:
 - CoinGecko community sentiment for the symbol (% bullish vs bearish)
 - CoinGecko trending coins (market-wide attention)
 - Google Trends presence for the symbol
+- FinBERT sentiment (ProsusAI/finbert) on recent headlines — financial-news tone, "net" in [-1, +1]
+- CryptoBERT sentiment (ElKulako/cryptobert) on recent headlines — crypto-native tone, "net" in [-1, +1]
 
 OBJECTIVE — fast in, fast out:
 - Holding period: hours to 1-2 days
@@ -43,13 +45,19 @@ DECISION FRAMEWORK (apply in order):
    - HIGH mempool pressure + rising fees → active demand, supports BUY.
    - LOW mempool activity + falling fees → waning demand, supports HOLD/SELL.
    - Hashrate trending up → miner conviction.
-4. COMMUNITY/TRENDS: confirmation only. They calibrate confidence, never set direction. If a coin is on the trending list AND technicals + mood agree, push confidence higher.
+4. SENTIMENT MODELS (FinBERT + CryptoBERT) ON RECENT HEADLINES:
+   - Treat the "net" score as the most useful number: net > +0.30 = clearly bullish text, net < -0.30 = clearly bearish text, in-between = noisy.
+   - When both models AGREE on direction, weight that confirmation higher than community votes.
+   - When they DISAGREE (e.g., FinBERT bullish, CryptoBERT bearish), discount both — the news is ambiguous; rely more on technicals and on-chain.
+   - Low n (n<3) means few headlines were available — treat sentiment as a weak signal.
+5. COMMUNITY/TRENDS: confirmation only. They calibrate confidence, never set direction. If a coin is on the trending list AND technicals + mood agree, push confidence higher.
 
 CONFIDENCE CALIBRATION:
-- All three layers (technical + mood + on-chain) align bullish → BUY at 0.75-0.95
-- Two of three align → BUY/SELL at 0.50-0.70
+- All four layers (technical + mood + on-chain + sentiment models) align → BUY/SELL at 0.80-0.95
+- Three of four align → 0.65-0.80
+- Two of four align → 0.45-0.65, often a HOLD
 - Mixed or conflicting signals → HOLD at 0.40-0.55, never force a trade
-- No clear technical setup → HOLD regardless of mood
+- No clear technical setup → HOLD regardless of mood/sentiment
 
 Always emit your decision via the `record_signal` tool. Do not respond with prose."""
 
@@ -81,8 +89,8 @@ def _request(symbol, asset_type, indicators, news_summary):
     user_text = (
         f"Analyze {symbol} ({asset_type.upper()}).\n\n"
         f"TECHNICAL INDICATORS:\n{json.dumps(indicators, indent=2, sort_keys=True)}\n\n"
-        f"MARKET CONTEXT (Fear & Greed + On-chain + Community):\n{news_summary or 'No data available.'}\n\n"
-        "Apply the decision framework: technicals first, then layer mood and on-chain to confirm. "
+        f"MARKET CONTEXT (Fear & Greed + On-chain + Community + FinBERT/CryptoBERT):\n{news_summary or 'No data available.'}\n\n"
+        "Apply the decision framework: technicals first, then layer mood, on-chain, and the sentiment models. "
         "Call record_signal with your decision."
     )
     return client.messages.create(

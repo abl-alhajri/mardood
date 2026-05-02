@@ -6,6 +6,9 @@ import os
 import requests
 from dotenv import load_dotenv
 from data.crypto.fetcher import coingecko_get
+from data.sentiment.hf_sentiment import (
+    analyze_finbert, analyze_cryptobert, format_sentiment,
+)
 
 load_dotenv()
 
@@ -94,6 +97,31 @@ def get_coingecko_trending() -> str:
         return f"CoinGecko Trending: {', '.join(names)}"
     except Exception:
         return "Trending unavailable."
+
+
+# ─── HEADLINE SOURCES (free, no auth) ───────────────────────────────────────
+
+def get_reddit_headlines(symbol: str, limit: int = 5) -> list[str]:
+    """Recent r/CryptoCurrency post titles mentioning the symbol — no auth."""
+    try:
+        clean = symbol.replace("USDT", "")
+        r = requests.get(
+            "https://www.reddit.com/r/CryptoCurrency/search.json",
+            params={"q": clean, "sort": "new", "restrict_sr": "1", "limit": limit},
+            headers={"User-Agent": "Mardood/1.0"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        children = r.json().get("data", {}).get("children", [])
+        return [c["data"].get("title", "") for c in children if c.get("data", {}).get("title")]
+    except Exception:
+        return []
+
+
+def _stock_headlines(ticker: str) -> list[str]:
+    """Pull bullet-list headlines out of get_stock_news."""
+    raw = get_stock_news(ticker)
+    return [line[2:].strip() for line in raw.splitlines() if line.startswith("- ")]
 
 
 # ─── GOOGLE TRENDS ──────────────────────────────────────────────────────────
@@ -226,6 +254,12 @@ def get_full_context(symbol: str, asset_type: str) -> str:
         lines.append(get_finnhub_sentiment(symbol))
         lines.append(get_insider_trading(symbol))
         lines.append(get_google_trends(symbol))
+
+        headlines = _stock_headlines(symbol)
+        if headlines:
+            fb = format_sentiment("FinBERT", analyze_finbert(headlines))
+            if fb:
+                lines.append(fb)
     else:
         # BTC mempool is a market-wide signal — include for every crypto, not
         # just BTC itself. Altcoins ride BTC's liquidity tide.
@@ -242,6 +276,15 @@ def get_full_context(symbol: str, asset_type: str) -> str:
         lines.append(get_crypto_news(symbol))
         lines.append(get_coingecko_trending())
         lines.append(get_google_trends(symbol))
+
+        headlines = get_reddit_headlines(symbol)
+        if headlines:
+            fb = format_sentiment("FinBERT", analyze_finbert(headlines))
+            cb = format_sentiment("CryptoBERT", analyze_cryptobert(headlines))
+            if fb:
+                lines.append(fb)
+            if cb:
+                lines.append(cb)
 
     return "\n".join(filter(None, lines))
 
