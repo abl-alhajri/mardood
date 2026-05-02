@@ -14,8 +14,8 @@ console = Console()
 
 def scan_crypto(symbol):
     try:
-        # 4h candles, 30 days of history (~180 candles — enough for EMA200 to converge)
-        df = get_crypto_ohlcv(symbol, days=30)
+        # 5-min candles, ~500 of them (≈41 hours of history — enough for EMA200)
+        df = get_crypto_ohlcv(symbol, interval="5m", limit=500)
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         news = get_full_context(symbol, "crypto")

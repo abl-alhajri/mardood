@@ -1,8 +1,10 @@
 """
-Mardood — Technical Indicators (no external libraries needed)
-Calculates RSI, MACD, Bollinger Bands, EMA manually using pandas only.
+XYZTradingAE — Technical Indicators (no external libraries needed)
+Calculates RSI, MACD, Bollinger Bands, EMA, ATR, and volume-spike
+ratios manually using pandas only.
 """
 import pandas as pd
+from config import VOLUME_SPIKE_RATIO
 
 
 def ema(series, period):
@@ -47,6 +49,11 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["atr"]     = tr.rolling(14).mean()
     df["atr_pct"] = df["atr"] / close
 
+    # Volume — current vs trailing 20-candle avg. Spikes are the highest-
+    # quality breakout confirmation in scalping.
+    df["volume_avg_20"] = df["volume"].rolling(20).mean()
+    df["volume_ratio"]  = df["volume"] / df["volume_avg_20"].replace(0, 1e-10)
+
     return df.dropna(subset=["ema_20", "rsi"])
 
 
@@ -75,5 +82,8 @@ def get_signal_summary(df: pd.DataFrame) -> dict:
         "above_ema20":    bool(latest["close"] > latest["ema_20"]),
         "above_ema50":    bool(latest["close"] > latest["ema_50"]),
         "above_ema200":   bool(latest["close"] > latest["ema_200"]),
-        "volume":         int(latest["volume"]),
+        "volume":         float(latest["volume"]),
+        "volume_avg_20":  round(float(latest["volume_avg_20"]), 2) if pd.notna(latest["volume_avg_20"]) else 0.0,
+        "volume_ratio":   round(float(latest["volume_ratio"]), 2) if pd.notna(latest["volume_ratio"]) else 1.0,
+        "volume_spike":   bool(latest["volume_ratio"] > VOLUME_SPIKE_RATIO) if pd.notna(latest["volume_ratio"]) else False,
     }

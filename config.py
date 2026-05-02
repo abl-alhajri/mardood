@@ -33,26 +33,28 @@ MEME_SYMBOLS = {
 }
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.40
+SIGNAL_CONFIDENCE_THRESHOLD = 0.55
 MAX_POSITION_SIZE_PCT       = 0.30
-SCAN_INTERVAL_MINUTES       = 30
+SCAN_INTERVAL_MINUTES       = 2
 REPORT_TIME                 = "08:00"
 TIMEZONE                    = "Asia/Dubai"
 MARDOOD_PHASE               = 2
 
-# --- Risk management ----------------------------------------------------
+# --- Scalping risk profile ----------------------------------------------
 # Default % stops/targets — used as a fallback when ATR isn't available.
-# These mirror the brain's stated strategy (4:1 reward/risk).
-STOP_LOSS_PCT       = 0.02   # 2%
-TAKE_PROFIT_PCT     = 0.08   # 8% (4 * SL)
+# Tight stops + 3:1 reward/risk for fast scalps (minutes to 2 hours hold).
+STOP_LOSS_PCT       = 0.005    # 0.5%
+TAKE_PROFIT_PCT     = 0.015    # 1.5%  (3 * SL)
 
-# ATR-based stops (preferred when atr_pct is on the signal). Distance
-# scales with realised volatility, but is bounded so meme coins don't
-# blow out into 30%+ stops.
+# ATR-based stops (preferred when atr_pct is on the signal). Distances
+# scale with realised volatility on 5-min candles but are bounded.
 ATR_SL_MULTIPLIER   = 1.5
-ATR_RR_MULTIPLIER   = 4.0
-MIN_SL_PCT          = 0.01
-MAX_SL_PCT          = 0.05
+ATR_RR_MULTIPLIER   = 3.0
+MIN_SL_PCT          = 0.003    # 0.3% — 5m candles have small ATR
+MAX_SL_PCT          = 0.015    # 1.5% — scalp-tight ceiling
+
+# Volume-spike detection threshold (used by indicators)
+VOLUME_SPIKE_RATIO  = 2.0      # current candle volume / 20-candle avg
 
 # Concurrent-position caps
 MAX_CONCURRENT_POSITIONS = 5

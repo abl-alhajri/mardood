@@ -58,24 +58,34 @@ def coingecko_get(path: str, params: dict | None = None, timeout: int = 10) -> d
     raise RuntimeError(f"CoinGecko: exhausted {_CG_MAX_RETRIES} retries for {path}: {last_err}")
 
 
-def get_crypto_ohlcv(symbol: str, days: int = 30) -> pd.DataFrame:
-    """
-    Fetch OHLC candles. CoinGecko granularity is derived from `days`:
-        days = 1     -> 30-min candles
-        days = 2-30  -> 4-hour candles  (default, ~180 candles)
-        days >= 31   -> 4-day candles
-    """
-    coin_id = SYMBOL_TO_ID.get(symbol)
-    if not coin_id:
-        raise ValueError(f"Unknown symbol: {symbol}")
+BINANCE_BASE = "https://api.binance.com"
 
-    data = coingecko_get(f"/coins/{coin_id}/ohlc", {"vs_currency": "usd", "days": days})
 
-    df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
+def get_crypto_ohlcv(symbol: str, interval: str = "5m", limit: int = 500) -> pd.DataFrame:
+    """
+    Fetch OHLCV candles from Binance public klines API. Binance supports
+    intra-hour granularities CoinGecko doesn't (and returns real volume,
+    which CoinGecko's OHLC endpoint zeroes out).
+
+    intervals: "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", ...
+    limit:     max 1000 (default 500 ~= 41 hours of 5-min data)
+    """
+    r = requests.get(
+        f"{BINANCE_BASE}/api/v3/klines",
+        params={"symbol": symbol, "interval": interval, "limit": limit},
+        timeout=10,
+    )
+    r.raise_for_status()
+    data = r.json()
+
+    df = pd.DataFrame(data, columns=[
+        "timestamp", "open", "high", "low", "close", "volume",
+        "close_time", "quote_volume", "trades",
+        "taker_buy_base", "taker_buy_quote", "ignore",
+    ])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df.set_index("timestamp", inplace=True)
-    df["volume"] = 0.0
-    for col in ["open", "high", "low", "close"]:
+    for col in ["open", "high", "low", "close", "volume"]:
         df[col] = df[col].astype(float)
     return df[["open", "high", "low", "close", "volume"]]
 
@@ -89,5 +99,5 @@ def get_crypto_price(symbol: str) -> float:
     return float(data[coin_id]["usd"])
 
 
-def get_watchlist_data(days: int = 30) -> dict:
-    return {symbol: get_crypto_ohlcv(symbol, days=days) for symbol in CRYPTO_WATCHLIST}
+def get_watchlist_data(interval: str = "5m", limit: int = 500) -> dict:
+    return {symbol: get_crypto_ohlcv(symbol, interval=interval, limit=limit) for symbol in CRYPTO_WATCHLIST}
