@@ -66,6 +66,36 @@ def init_paper_trading():
             """, (datetime.utcnow().isoformat(),))
         conn.commit()
 
+    _cleanup_stale_stock_positions()
+
+
+def _cleanup_stale_stock_positions():
+    """
+    One-shot: close any open stock positions left over from before
+    STOCKS_WATCHLIST was removed. Refunds cash at entry price (zero P&L)
+    without touching wins/losses/total_trades — these were never real exits.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, symbol, quantity, entry_price, entry_time FROM positions WHERE status='OPEN' AND asset_type='stock'"
+        ).fetchall()
+        if not rows:
+            return
+        now = datetime.utcnow().isoformat()
+        refunded = 0.0
+        for pid, sym, qty, entry, etime in rows:
+            cost = qty * entry
+            refunded += cost
+            conn.execute("UPDATE positions SET status='CLOSED' WHERE id=?", (pid,))
+            conn.execute("""
+                INSERT INTO trade_history
+                    (symbol, side, entry_price, exit_price, quantity, pnl, pnl_pct, entry_time, exit_time, exit_reason)
+                VALUES (?, 'BUY', ?, ?, ?, 0.0, 0.0, ?, ?, 'Stocks deprecated — refunded')
+            """, (sym, entry, entry, qty, etime, now))
+        conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=? WHERE id=1", (refunded, now))
+        conn.commit()
+        print(f"[paper_trader] Refunded ${refunded:.2f} from {len(rows)} stale stock position(s)")
+
 
 def get_portfolio() -> dict:
     """Get current portfolio state."""
@@ -95,7 +125,7 @@ def get_portfolio() -> dict:
 def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
     """
     Execute a paper trade based on a signal.
-    Returns trade details or None if trade was skipped.
+    Returns trade details or a {"action": "SKIPPED", ...} dict.
     """
     symbol = signal["symbol"]
     sig = signal["signal"]
@@ -112,9 +142,12 @@ def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
 
     # --- BUY logic: open new position ---
     if sig == "BUY":
-        position_value = cash * MAX_POSITION_SIZE_PCT  # Max 5% of portfolio
+        if symbol in open_positions:
+            return {"action": "SKIPPED", "symbol": symbol, "reason": "already long"}
+
+        position_value = cash * MAX_POSITION_SIZE_PCT
         if position_value < 10:
-            return None  # Not enough cash
+            return {"action": "SKIPPED", "symbol": symbol, "reason": f"insufficient cash (${cash:.2f})"}
 
         quantity = position_value / current_price
         stop_loss   = current_price * (1 - STOP_LOSS_PCT)

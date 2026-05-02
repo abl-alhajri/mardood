@@ -35,12 +35,30 @@ def get_current_price(symbol, asset_type):
             return float(df["close"].iloc[-1])
         else:
             return get_crypto_price(symbol)
-    except:
+    except Exception as e:
+        console.print(f"  [red]✗ Price fetch failed for {symbol}: {e}[/red]")
         return None
 
 
 def run_scan():
     console.rule("[cyan]Market Scan[/cyan]")
+
+    # Run SL/TP exits on currently open positions before scanning for new entries
+    if MARDOOD_PHASE >= 2:
+        from execution.paper_trader import get_portfolio
+        open_syms = {p["symbol"]: p["asset_type"] for p in get_portfolio()["positions"]}
+        if open_syms:
+            current_prices = {}
+            for sym, atype in open_syms.items():
+                p = get_current_price(sym, atype)
+                if p:
+                    current_prices[sym] = p
+            exits = check_stop_loss_take_profit(current_prices)
+            for ex in exits:
+                emoji = "✅" if ex["pnl"] > 0 else "❌"
+                console.print(f"  [{('green' if ex['pnl'] > 0 else 'red')}]{emoji} EXIT {ex['symbol']} | PnL: ${ex['pnl']} ({ex['reason']})[/]")
+                send_telegram(f"📝 *Auto-Exit*\n{emoji} {ex['symbol']} | PnL: *${ex['pnl']}* ({ex['pnl_pct']}%)\nReason: {ex['reason']}")
+
     signals = run_full_scan()
 
     if signals:
@@ -53,19 +71,23 @@ def run_scan():
             console.print("\n[cyan]📝 Executing paper trades...[/cyan]")
             for signal in signals:
                 price = get_current_price(signal["symbol"], signal["asset_type"])
-                if price:
-                    result = execute_paper_trade(signal, price)
-                    if result:
-                        action = result["action"]
-                        sym = result["symbol"]
-                        if action == "OPENED":
-                            console.print(f"  [green]+ BOUGHT {sym} @ ${price:.2f}[/green]")
-                            send_telegram(f"📝 *Paper Trade*\n🟢 BOUGHT {sym} @ ${price:.2f}\nStop: ${result['stop_loss']} | Target: ${result['take_profit']}")
-                        elif action == "CLOSED":
-                            pnl = result["pnl"]
-                            emoji = "✅" if pnl > 0 else "❌"
-                            console.print(f"  [{('green' if pnl > 0 else 'red')}]{emoji} CLOSED {sym} | PnL: ${pnl}[/]")
-                            send_telegram(f"📝 *Paper Trade Closed*\n{emoji} {sym} | PnL: *${pnl}* ({result['pnl_pct']}%)\nReason: {result['reason']}")
+                if not price:
+                    continue
+                result = execute_paper_trade(signal, price)
+                if not result:
+                    continue
+                action = result["action"]
+                sym = result["symbol"]
+                if action == "OPENED":
+                    console.print(f"  [green]+ BOUGHT {sym} @ ${price:.6f}[/green]")
+                    send_telegram(f"📝 *Paper Trade*\n🟢 BOUGHT {sym} @ ${price}\nStop: ${result['stop_loss']} | Target: ${result['take_profit']}")
+                elif action == "CLOSED":
+                    pnl = result["pnl"]
+                    emoji = "✅" if pnl > 0 else "❌"
+                    console.print(f"  [{('green' if pnl > 0 else 'red')}]{emoji} CLOSED {sym} | PnL: ${pnl}[/]")
+                    send_telegram(f"📝 *Paper Trade Closed*\n{emoji} {sym} | PnL: *${pnl}* ({result['pnl_pct']}%)\nReason: {result['reason']}")
+                elif action == "SKIPPED":
+                    console.print(f"  [dim]· skipped {sym}: {result['reason']}[/dim]")
 
             perf = get_performance_summary()
             console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
