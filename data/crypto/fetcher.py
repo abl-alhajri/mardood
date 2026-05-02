@@ -58,19 +58,65 @@ def coingecko_get(path: str, params: dict | None = None, timeout: int = 10) -> d
     raise RuntimeError(f"CoinGecko: exhausted {_CG_MAX_RETRIES} retries for {path}: {last_err}")
 
 
+# Coinbase Exchange public market data — no auth, no geo-block, real volume,
+# 5-minute candles. Used for symbols listed on Coinbase. Falls through to
+# CoinGecko (30-min, no volume) for symbols Coinbase doesn't carry.
+COINBASE_BASE = "https://api.exchange.coinbase.com"
+
+COINBASE_SYMBOLS = {
+    "BTCUSDT":  "BTC-USD",
+    "ETHUSDT":  "ETH-USD",
+    "SOLUSDT":  "SOL-USD",
+    "XRPUSDT":  "XRP-USD",
+    "DOGEUSDT": "DOGE-USD",
+    "SHIBUSDT": "SHIB-USD",
+}
+
+
+def coinbase_get(path: str, params: dict | None = None, timeout: int = 10):
+    """GET <COINBASE_BASE><path>. Public, unauthenticated."""
+    r = requests.get(f"{COINBASE_BASE}{path}", params=params, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+
+def get_coinbase_ohlcv(symbol: str, granularity: int = 300, limit: int = 300) -> pd.DataFrame:
+    """
+    Fetch real OHLCV candles from Coinbase Exchange.
+    granularity: seconds per candle. Valid: 60, 300, 900, 3600, 21600, 86400.
+                 Default 300 = 5-minute candles.
+    limit:       max 300 (Coinbase API caps at ~300 candles per request).
+                 At 5-min granularity that's ~25 hours of history.
+    """
+    product_id = COINBASE_SYMBOLS[symbol]
+    data = coinbase_get(
+        f"/products/{product_id}/candles",
+        params={"granularity": granularity},
+    )
+    # Coinbase response: [[time_unix_seconds, low, high, open, close, volume], ...]
+    # newest-first; we sort to oldest-first for rolling/EWM windows.
+    df = pd.DataFrame(data, columns=["timestamp", "low", "high", "open", "close", "volume"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+    df.set_index("timestamp", inplace=True)
+    df.sort_index(inplace=True)
+    df = df.tail(limit)
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = df[col].astype(float)
+    return df[["open", "high", "low", "close", "volume"]]
+
+
 def get_crypto_ohlcv(symbol: str, days: int = 1) -> pd.DataFrame:
     """
-    Fetch OHLC candles from CoinGecko (Binance is geo-blocked from US infra
-    like Railway us-west2). Granularity is dictated by `days`:
-        days = 1   -> 30-min candles, ~48 of them   (closest to 5-min on free tier)
-        days = 2   -> 30-min candles, ~96 of them
-        days = 30  -> 4-hour  candles
-        days = 90+ -> 4-day   candles
+    Hybrid OHLCV fetcher:
+      - Symbols in COINBASE_SYMBOLS -> Coinbase Exchange, 5-min candles, real volume
+      - Everything else             -> CoinGecko /ohlc, 30-min candles, zero volume
 
-    Volume is unavailable on this endpoint (CoinGecko's /ohlc returns price-only),
-    so the volume column is filled with zeros. The downstream volume_ratio /
-    volume_spike features degrade gracefully to neutral values.
+    `days` is only used for the CoinGecko fallback (1 -> ~48 30-min candles).
     """
+    if symbol in COINBASE_SYMBOLS:
+        return get_coinbase_ohlcv(symbol)
+
+    # CoinGecko fallback for symbols Coinbase doesn't carry (BNB, PEPE, WIF, BONK, FLOKI)
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")
@@ -84,6 +130,11 @@ def get_crypto_ohlcv(symbol: str, days: int = 1) -> pd.DataFrame:
     for col in ["open", "high", "low", "close"]:
         df[col] = df[col].astype(float)
     return df[["open", "high", "low", "close", "volume"]]
+
+
+def candle_interval_minutes(symbol: str) -> int:
+    """5 for Coinbase symbols, 30 for CoinGecko fallbacks. Used to tag the signal."""
+    return 5 if symbol in COINBASE_SYMBOLS else 30
 
 
 def get_simple_prices(symbols: list[str]) -> dict:

@@ -2,7 +2,7 @@
 XYZTradingAE — Signal Generator
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from data.crypto.fetcher import get_crypto_ohlcv
+from data.crypto.fetcher import get_crypto_ohlcv, candle_interval_minutes, COINBASE_SYMBOLS
 from data.news.fetcher import get_full_context
 from analysis.technical.indicators import add_all_indicators, get_signal_summary
 from analysis.brain import analyze
@@ -14,16 +14,18 @@ console = Console()
 
 def scan_crypto(symbol):
     try:
-        # CoinGecko 30-min candles (free-tier closest to 5-min). days=1 -> ~48 candles.
-        # EMA200 won't fully converge with 48 candles but EWM still produces a value.
+        # Hybrid source: Coinbase (5-min, real volume) for majors,
+        # CoinGecko (30-min, zero volume) for memes/BNB.
         df = get_crypto_ohlcv(symbol, days=1)
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
+        # Tag the regime so the brain knows which playbook to apply
+        indicators["interval_minutes"] = candle_interval_minutes(symbol)
+        indicators["volume_available"] = symbol in COINBASE_SYMBOLS
         news = get_full_context(symbol, "crypto")
         signal = analyze(symbol, "crypto", indicators, news)
         signal["symbol"] = symbol
         signal["asset_type"] = "crypto"
-        # Pipe ATR through so the paper trader can size stops by realised vol
         signal["atr_pct"] = indicators.get("atr_pct", 0.0)
         return signal
     except Exception as e:
