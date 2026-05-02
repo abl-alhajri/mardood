@@ -1,14 +1,21 @@
 """
-Mardood — Claude API Brain (Enhanced)
+Mardood — Claude API Brain
 """
-import anthropic
-import json
 import os
+import time
+import random
+import json
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = anthropic.Anthropic(
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    max_retries=5,
+)
+
+MODEL = "claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """You are Mardood, an elite SHORT-TERM scalp trader with access to:
 - Technical indicators (RSI, MACD, Bollinger Bands, EMA)
@@ -30,39 +37,68 @@ Your goal is quick profits: enter fast, exit fast.
 - If Twitter + Reddit are both bullish AND technicals confirm → very high confidence BUY
 - If insider buying + bullish news → strong BUY signal
 
-Always respond with ONLY a JSON object (no markdown, no code fences):
-{
-  "signal": "BUY" or "SELL" or "HOLD",
-  "confidence": 0.0 to 1.0,
-  "reasoning": "2-3 sentence explanation mentioning key data sources",
-  "key_factors": ["factor 1", "factor 2", "factor 3"],
-  "risk_level": "LOW" or "MEDIUM" or "HIGH",
-  "suggested_entry": null,
-  "suggested_stop_loss": null,
-  "suggested_take_profit": null,
-  "timeframe": "SHORT"
-}"""
+Always emit your decision via the `record_signal` tool. Do not respond with prose."""
+
+SIGNAL_TOOL = {
+    "name": "record_signal",
+    "description": "Record the trading signal for the analyzed symbol. Call this exactly once per analysis.",
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "signal": {"type": "string", "enum": ["BUY", "SELL", "HOLD"]},
+            "confidence": {"type": "number", "description": "0.0 to 1.0"},
+            "reasoning": {"type": "string", "description": "2-3 sentences mentioning key data sources"},
+            "key_factors": {"type": "array", "items": {"type": "string"}},
+            "risk_level": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
+            "timeframe": {"type": "string", "enum": ["SHORT"]},
+        },
+        "required": ["signal", "confidence", "reasoning", "key_factors", "risk_level", "timeframe"],
+        "additionalProperties": False,
+    },
+}
+
+MAX_ATTEMPTS = 4
+BASE_DELAY = 1.0
+MAX_DELAY = 30.0
+
+
+def _request(symbol, asset_type, indicators, news_summary):
+    user_text = (
+        f"Analyze {symbol} ({asset_type.upper()}).\n\n"
+        f"TECHNICAL INDICATORS:\n{json.dumps(indicators, indent=2, sort_keys=True)}\n\n"
+        f"MARKET CONTEXT (News + Social + On-chain):\n{news_summary or 'No data available.'}\n\n"
+        "Call record_signal with your decision based on all of the above."
+    )
+    return client.messages.create(
+        model=MODEL,
+        max_tokens=1024,
+        system=[{
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        tools=[SIGNAL_TOOL],
+        tool_choice={"type": "tool", "name": "record_signal"},
+        messages=[{"role": "user", "content": user_text}],
+    )
 
 
 def analyze(symbol, asset_type, indicators, news_summary=""):
-    message = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=1000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": f"""Analyze {symbol} ({asset_type.upper()}).
-
-TECHNICAL INDICATORS:
-{json.dumps(indicators, indent=2)}
-
-MARKET CONTEXT (News + Social + On-chain):
-{news_summary or "No data available."}
-
-Based on ALL the above data sources combined, give your trading signal.
-JSON only:"""}]
-    )
-    raw = message.content[0].text.strip()
-    if "```" in raw:
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    return json.loads(raw.strip())
+    last_err = None
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            message = _request(symbol, asset_type, indicators, news_summary)
+            for block in message.content:
+                if block.type == "tool_use" and block.name == "record_signal":
+                    return block.input
+            raise ValueError(f"Claude returned no record_signal call (stop_reason={message.stop_reason})")
+        except (anthropic.APIConnectionError, anthropic.RateLimitError, ValueError) as e:
+            last_err = e
+        except anthropic.APIStatusError as e:
+            if e.status_code < 500:
+                raise
+            last_err = e
+        delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+        time.sleep(delay)
+    raise last_err
