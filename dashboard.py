@@ -9,7 +9,11 @@ import sqlite3
 import threading
 import requests
 from config import MEMORY_DB, CRYPTO_WATCHLIST
-from data.crypto.fetcher import get_simple_prices
+from data.crypto.fetcher import (
+    get_simple_prices,
+    get_coinbase_prices,
+    COINBASE_SYMBOLS,
+)
 
 app = Flask(__name__)
 price_cache = {}
@@ -18,6 +22,12 @@ cache_lock = threading.Lock()
 PRICE_REFRESH_SECONDS = 10
 STREAM_PUSH_SECONDS = 2
 STREAM_KEEPALIVE_SECONDS = 15  # send a comment ping if no data has flowed
+
+# CoinGecko meme/BNB prices change slowly enough that a 5-min TTL is fine,
+# and it drops the dashboard's CoinGecko load from ~6/min to ~0.2/min.
+MEME_PRICE_TTL_SECONDS = 5 * 60
+_meme_cache = {"ts": 0.0, "prices": {}}
+_meme_cache_lock = threading.Lock()
 
 DEFAULT_PORTFOLIO = {"cash": 10000, "total_trades": 0, "wins": 0, "losses": 0, "positions": []}
 DEFAULT_PAYLOAD = {
@@ -34,13 +44,45 @@ DEFAULT_PAYLOAD = {
 }
 
 
-def fetch_live_prices():
-    """One batched CoinGecko call for all watchlist symbols (Binance is geo-blocked from Railway US)."""
+def _fetch_meme_prices_cached(symbols: list[str]) -> dict:
+    """5-min TTL cache around CoinGecko's batched /simple/price. Serves stale on error."""
+    if not symbols:
+        return {}
+    now = time.time()
+    with _meme_cache_lock:
+        if _meme_cache["prices"] and now - _meme_cache["ts"] < MEME_PRICE_TTL_SECONDS:
+            return dict(_meme_cache["prices"])
     try:
-        prices = get_simple_prices(CRYPTO_WATCHLIST)
+        fresh = get_simple_prices(symbols)
     except Exception as e:
-        print(f"[dashboard] price fetch failed: {e}", flush=True)
-        return
+        print(f"[dashboard] CoinGecko meme price fetch failed: {e}; serving stale cache", flush=True)
+        with _meme_cache_lock:
+            return dict(_meme_cache["prices"])
+    with _meme_cache_lock:
+        _meme_cache["ts"] = now
+        _meme_cache["prices"] = fresh
+    return fresh
+
+
+def fetch_live_prices():
+    """
+    Hybrid price refresh:
+      - Coinbase /products/{X-USD}/stats for the 6 majors (always fresh, parallel)
+      - CoinGecko /simple/price for the remaining symbols (5-min TTL cache)
+    """
+    coinbase_syms  = [s for s in CRYPTO_WATCHLIST if s in COINBASE_SYMBOLS]
+    coingecko_syms = [s for s in CRYPTO_WATCHLIST if s not in COINBASE_SYMBOLS]
+
+    prices: dict = {}
+    if coinbase_syms:
+        try:
+            prices.update(get_coinbase_prices(coinbase_syms))
+        except Exception as e:
+            print(f"[dashboard] Coinbase price fetch failed: {e}", flush=True)
+
+    if coingecko_syms:
+        prices.update(_fetch_meme_prices_cached(coingecko_syms))
+
     if prices:
         with cache_lock:
             price_cache.update(prices)

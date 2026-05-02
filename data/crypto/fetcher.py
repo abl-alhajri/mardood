@@ -137,6 +137,38 @@ def candle_interval_minutes(symbol: str) -> int:
     return 5 if symbol in COINBASE_SYMBOLS else 30
 
 
+def get_coinbase_prices(symbols: list[str]) -> dict:
+    """
+    Live USD price + 24h change for symbols listed on Coinbase Exchange.
+    One /products/{X-USD}/stats call per symbol, fanned out in parallel.
+    Returns {SYMBOL: {price, change_pct}}; symbols not on Coinbase are skipped.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    pairs = [(s, COINBASE_SYMBOLS[s]) for s in symbols if s in COINBASE_SYMBOLS]
+    if not pairs:
+        return {}
+
+    def _one(sym_and_product):
+        sym, product_id = sym_and_product
+        try:
+            d = coinbase_get(f"/products/{product_id}/stats", timeout=5)
+            last = float(d["last"])
+            opn = float(d["open"])
+            chg = ((last - opn) / opn * 100) if opn > 0 else 0.0
+            return sym, {"price": last, "change_pct": round(chg, 2)}
+        except Exception as e:
+            print(f"[coinbase] {sym} stats failed: {e}", flush=True)
+            return sym, None
+
+    out: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=min(len(pairs), 6)) as ex:
+        for sym, info in ex.map(_one, pairs):
+            if info:
+                out[sym] = info
+    return out
+
+
 def get_simple_prices(symbols: list[str]) -> dict:
     """
     Fetch live USD prices + 24h change for many symbols in ONE CoinGecko call.
