@@ -58,36 +58,61 @@ def coingecko_get(path: str, params: dict | None = None, timeout: int = 10) -> d
     raise RuntimeError(f"CoinGecko: exhausted {_CG_MAX_RETRIES} retries for {path}: {last_err}")
 
 
-BINANCE_BASE = "https://api.binance.com"
-
-
-def get_crypto_ohlcv(symbol: str, interval: str = "5m", limit: int = 500) -> pd.DataFrame:
+def get_crypto_ohlcv(symbol: str, days: int = 1) -> pd.DataFrame:
     """
-    Fetch OHLCV candles from Binance public klines API. Binance supports
-    intra-hour granularities CoinGecko doesn't (and returns real volume,
-    which CoinGecko's OHLC endpoint zeroes out).
+    Fetch OHLC candles from CoinGecko (Binance is geo-blocked from US infra
+    like Railway us-west2). Granularity is dictated by `days`:
+        days = 1   -> 30-min candles, ~48 of them   (closest to 5-min on free tier)
+        days = 2   -> 30-min candles, ~96 of them
+        days = 30  -> 4-hour  candles
+        days = 90+ -> 4-day   candles
 
-    intervals: "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", ...
-    limit:     max 1000 (default 500 ~= 41 hours of 5-min data)
+    Volume is unavailable on this endpoint (CoinGecko's /ohlc returns price-only),
+    so the volume column is filled with zeros. The downstream volume_ratio /
+    volume_spike features degrade gracefully to neutral values.
     """
-    r = requests.get(
-        f"{BINANCE_BASE}/api/v3/klines",
-        params={"symbol": symbol, "interval": interval, "limit": limit},
-        timeout=10,
-    )
-    r.raise_for_status()
-    data = r.json()
+    coin_id = SYMBOL_TO_ID.get(symbol)
+    if not coin_id:
+        raise ValueError(f"Unknown symbol: {symbol}")
 
-    df = pd.DataFrame(data, columns=[
-        "timestamp", "open", "high", "low", "close", "volume",
-        "close_time", "quote_volume", "trades",
-        "taker_buy_base", "taker_buy_quote", "ignore",
-    ])
+    data = coingecko_get(f"/coins/{coin_id}/ohlc", {"vs_currency": "usd", "days": days})
+
+    df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     df.set_index("timestamp", inplace=True)
-    for col in ["open", "high", "low", "close", "volume"]:
+    df["volume"] = 0.0  # CoinGecko OHLC endpoint does not provide volume
+    for col in ["open", "high", "low", "close"]:
         df[col] = df[col].astype(float)
     return df[["open", "high", "low", "close", "volume"]]
+
+
+def get_simple_prices(symbols: list[str]) -> dict:
+    """
+    Fetch live USD prices + 24h change for many symbols in ONE CoinGecko call.
+    Used by the dashboard's price grid. Returns {SYMBOL: {price, change_pct}}.
+    """
+    coin_ids = [SYMBOL_TO_ID[s] for s in symbols if s in SYMBOL_TO_ID]
+    if not coin_ids:
+        return {}
+    data = coingecko_get(
+        "/simple/price",
+        {
+            "ids": ",".join(coin_ids),
+            "vs_currencies": "usd",
+            "include_24hr_change": "true",
+        },
+    )
+    id_to_sym = {v: k for k, v in SYMBOL_TO_ID.items()}
+    out: dict[str, dict] = {}
+    for coin_id, info in data.items():
+        sym = id_to_sym.get(coin_id)
+        if not sym or "usd" not in info:
+            continue
+        out[sym] = {
+            "price": float(info["usd"]),
+            "change_pct": round(float(info.get("usd_24h_change", 0) or 0), 2),
+        }
+    return out
 
 
 def get_crypto_price(symbol: str) -> float:
@@ -99,5 +124,5 @@ def get_crypto_price(symbol: str) -> float:
     return float(data[coin_id]["usd"])
 
 
-def get_watchlist_data(interval: str = "5m", limit: int = 500) -> dict:
-    return {symbol: get_crypto_ohlcv(symbol, interval=interval, limit=limit) for symbol in CRYPTO_WATCHLIST}
+def get_watchlist_data(days: int = 1) -> dict:
+    return {symbol: get_crypto_ohlcv(symbol, days=days) for symbol in CRYPTO_WATCHLIST}

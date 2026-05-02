@@ -14,8 +14,9 @@ console = Console()
 
 def scan_crypto(symbol):
     try:
-        # 5-min candles, ~500 of them (≈41 hours of history — enough for EMA200)
-        df = get_crypto_ohlcv(symbol, interval="5m", limit=500)
+        # CoinGecko 30-min candles (free-tier closest to 5-min). days=1 -> ~48 candles.
+        # EMA200 won't fully converge with 48 candles but EWM still produces a value.
+        df = get_crypto_ohlcv(symbol, days=1)
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         news = get_full_context(symbol, "crypto")

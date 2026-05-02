@@ -51,8 +51,15 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # Volume — current vs trailing 20-candle avg. Spikes are the highest-
     # quality breakout confirmation in scalping.
+    # NOTE: when the data source omits volume (e.g. CoinGecko's /ohlc returns
+    # 0s), avg will also be 0 — emit a neutral 1.0 ratio so the brain doesn't
+    # interpret it as "volume drying up".
     df["volume_avg_20"] = df["volume"].rolling(20).mean()
-    df["volume_ratio"]  = df["volume"] / df["volume_avg_20"].replace(0, 1e-10)
+    has_volume = df["volume_avg_20"] > 0
+    df["volume_ratio"] = 1.0
+    df.loc[has_volume, "volume_ratio"] = (
+        df.loc[has_volume, "volume"] / df.loc[has_volume, "volume_avg_20"]
+    )
 
     return df.dropna(subset=["ema_20", "rsi"])
 

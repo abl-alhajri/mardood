@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import requests
 from config import MEMORY_DB, CRYPTO_WATCHLIST
+from data.crypto.fetcher import get_simple_prices
 
 app = Flask(__name__)
 price_cache = {}
@@ -34,17 +35,12 @@ DEFAULT_PAYLOAD = {
 
 
 def fetch_live_prices():
-    prices = {}
-    for symbol in CRYPTO_WATCHLIST:
-        try:
-            r = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}", timeout=5)
-            d = r.json()
-            prices[symbol] = {
-                "price": float(d["lastPrice"]),
-                "change_pct": round(float(d["priceChangePercent"]), 2),
-            }
-        except Exception:
-            pass
+    """One batched CoinGecko call for all watchlist symbols (Binance is geo-blocked from Railway US)."""
+    try:
+        prices = get_simple_prices(CRYPTO_WATCHLIST)
+    except Exception as e:
+        print(f"[dashboard] price fetch failed: {e}", flush=True)
+        return
     if prices:
         with cache_lock:
             price_cache.update(prices)
