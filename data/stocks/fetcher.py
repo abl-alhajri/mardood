@@ -4,7 +4,6 @@ Fetches OHLCV data, volume, and fundamentals for US stocks.
 """
 import yfinance as yf
 import pandas as pd
-from config import STOCKS_WATCHLIST
 
 
 def get_stock_data(ticker: str, period: str = "3mo", interval: str = "1d") -> pd.DataFrame:
@@ -30,8 +29,3 @@ def get_stock_info(ticker: str) -> dict:
     """Fetch fundamental info: P/E, market cap, sector, earnings."""
     stock = yf.Ticker(ticker)
     return stock.info
-
-
-def get_watchlist_data(period: str = "3mo") -> dict:
-    """Fetch data for all stocks in watchlist."""
-    return {ticker: get_stock_data(ticker, period) for ticker in STOCKS_WATCHLIST}

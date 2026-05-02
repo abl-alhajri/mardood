@@ -6,8 +6,7 @@ from flask import Flask, jsonify, render_template_string
 import sqlite3
 import threading
 import requests
-import yfinance as yf
-from config import MEMORY_DB, STOCKS_WATCHLIST, CRYPTO_WATCHLIST
+from config import MEMORY_DB, CRYPTO_WATCHLIST
 
 app = Flask(__name__)
 price_cache = {}
@@ -15,15 +14,6 @@ cache_lock = threading.Lock()
 
 def fetch_live_prices():
     prices = {}
-    for ticker in STOCKS_WATCHLIST:
-        try:
-            df = yf.Ticker(ticker).history(period="1d", interval="1m")
-            if not df.empty:
-                price = float(df["Close"].iloc[-1])
-                prev = float(df["Close"].iloc[0])
-                chg_pct = round((price - prev) / prev * 100, 2)
-                prices[ticker] = {"price": price, "change_pct": chg_pct}
-        except: pass
     for symbol in CRYPTO_WATCHLIST:
         try:
             r = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}", timeout=5)

@@ -4,12 +4,11 @@ Mardood — Signal Generator with Rate Limiting for Gemini
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from data.stocks.fetcher import get_stock_data
 from data.crypto.fetcher import get_crypto_ohlcv
 from data.news.fetcher import get_full_context
 from analysis.technical.indicators import add_all_indicators, get_signal_summary
 from analysis.brain import analyze
-from config import STOCKS_WATCHLIST, CRYPTO_WATCHLIST, SIGNAL_CONFIDENCE_THRESHOLD
+from config import CRYPTO_WATCHLIST, SIGNAL_CONFIDENCE_THRESHOLD
 from rich.console import Console
 
 console = Console()
@@ -36,21 +35,6 @@ def rate_limited_analyze(symbol, asset_type, indicators, news):
     return analyze(symbol, asset_type, indicators, news)
 
 
-def scan_stock(ticker):
-    try:
-        df = get_stock_data(ticker, period="3mo", interval="1d")
-        df = add_all_indicators(df)
-        indicators = get_signal_summary(df)
-        news = get_full_context(ticker, "stock")
-        signal = rate_limited_analyze(ticker, "stock", indicators, news)
-        signal["symbol"] = ticker
-        signal["asset_type"] = "stock"
-        return signal
-    except Exception as e:
-        console.print(f"  [red]✗ {ticker}: {e}[/red]")
-        return None
-
-
 def scan_crypto(symbol):
     try:
         df = get_crypto_ohlcv(symbol, interval="1d", limit=90)
@@ -70,8 +54,6 @@ def run_full_scan():
     all_signals = []
     tasks = []
 
-    for ticker in STOCKS_WATCHLIST:
-        tasks.append((scan_stock, ticker))
     for symbol in CRYPTO_WATCHLIST:
         tasks.append((scan_crypto, symbol))
 
