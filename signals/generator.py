@@ -37,13 +37,16 @@ def rate_limited_analyze(symbol, asset_type, indicators, news):
 
 def scan_crypto(symbol):
     try:
-        df = get_crypto_ohlcv(symbol, interval="1d", limit=90)
+        # 4h candles, 30 days of history (~180 candles — enough for EMA200 to converge)
+        df = get_crypto_ohlcv(symbol, days=30)
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         news = get_full_context(symbol, "crypto")
         signal = rate_limited_analyze(symbol, "crypto", indicators, news)
         signal["symbol"] = symbol
         signal["asset_type"] = "crypto"
+        # Pipe ATR through so the paper trader can size stops by realised vol
+        signal["atr_pct"] = indicators.get("atr_pct", 0.0)
         return signal
     except Exception as e:
         console.print(f"  [red]✗ {symbol}: {e}[/red]")

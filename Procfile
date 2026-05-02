@@ -1,1 +1,1 @@
-web: python dashboard.py & python main.py
+web: python run.py

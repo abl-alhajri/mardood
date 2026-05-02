@@ -39,6 +39,14 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["bb_mid"]   = sma20
     df["bb_lower"] = sma20 - 2 * std20
 
+    # ATR(14) — volatility for risk-adjusted stops
+    high_low  = df["high"] - df["low"]
+    high_pc   = (df["high"] - close.shift()).abs()
+    low_pc    = (df["low"]  - close.shift()).abs()
+    tr = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)
+    df["atr"]     = tr.rolling(14).mean()
+    df["atr_pct"] = df["atr"] / close
+
     return df.dropna(subset=["ema_20", "rsi"])
 
 
@@ -62,6 +70,8 @@ def get_signal_summary(df: pd.DataFrame) -> dict:
         "bb_upper":       round(float(latest["bb_upper"]), 6),
         "bb_lower":       round(float(latest["bb_lower"]), 6),
         "bb_position":    bb_pos,
+        "atr":            round(float(latest["atr"]), 6) if pd.notna(latest["atr"]) else 0.0,
+        "atr_pct":        round(float(latest["atr_pct"]), 5) if pd.notna(latest["atr_pct"]) else 0.0,
         "above_ema20":    bool(latest["close"] > latest["ema_20"]),
         "above_ema50":    bool(latest["close"] > latest["ema_50"]),
         "above_ema200":   bool(latest["close"] > latest["ema_200"]),

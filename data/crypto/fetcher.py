@@ -58,12 +58,18 @@ def coingecko_get(path: str, params: dict | None = None, timeout: int = 10) -> d
     raise RuntimeError(f"CoinGecko: exhausted {_CG_MAX_RETRIES} retries for {path}: {last_err}")
 
 
-def get_crypto_ohlcv(symbol: str, interval: str = "1d", limit: int = 90) -> pd.DataFrame:
+def get_crypto_ohlcv(symbol: str, days: int = 30) -> pd.DataFrame:
+    """
+    Fetch OHLC candles. CoinGecko granularity is derived from `days`:
+        days = 1     -> 30-min candles
+        days = 2-30  -> 4-hour candles  (default, ~180 candles)
+        days >= 31   -> 4-day candles
+    """
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")
 
-    data = coingecko_get(f"/coins/{coin_id}/ohlc", {"vs_currency": "usd", "days": limit})
+    data = coingecko_get(f"/coins/{coin_id}/ohlc", {"vs_currency": "usd", "days": days})
 
     df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
@@ -83,5 +89,5 @@ def get_crypto_price(symbol: str) -> float:
     return float(data[coin_id]["usd"])
 
 
-def get_watchlist_data(interval: str = "1d") -> dict:
-    return {symbol: get_crypto_ohlcv(symbol, interval) for symbol in CRYPTO_WATCHLIST}
+def get_watchlist_data(days: int = 30) -> dict:
+    return {symbol: get_crypto_ohlcv(symbol, days=days) for symbol in CRYPTO_WATCHLIST}
