@@ -3,8 +3,9 @@ Strategy adapters for the backtest harness.
 
 Two modes:
   - heuristic: rule-based, free, fast — validates the harness end-to-end
-                without paying for inference. Mimics the brain's general
-                bias toward technical-confirmation setups.
+                without paying for inference. Implementation lives in
+                analysis/heuristic.py and is shared with production
+                shadow mode.
   - brain:     calls Claude with the production system prompt + tool
                 schema. Cached on disk by (symbol, candle_ts,
                 indicators_hash) so re-runs are free after the first.
@@ -20,71 +21,10 @@ import sqlite3
 import threading
 from typing import Optional
 
+# Re-exported so existing backtest imports keep working.
+from analysis.heuristic import heuristic_decision  # noqa: F401
+
 CACHE_DB = pathlib.Path(__file__).parent / "cache" / "brain.db"
-
-
-# ─── HEURISTIC MODE ─────────────────────────────────────────────────────────
-
-def heuristic_decision(indicators: dict, btc_regime_bullish: bool = True) -> dict:
-    """
-    Single high-conviction BUY path. After 90d backtest analysis, the
-    prior two-tier emission produced too many low-quality setups. This
-    version requires SIX confirming layers in conjunction:
-
-      1. BTC regime: BTC above its 1h EMA200 (broad market trending up)
-      2. Bullish EMA stack on the symbol (price > EMA20 > EMA50 > EMA200)
-      3. MACD histogram meaningfully positive (> 0.05% of price — filters
-         micro-crosses near zero AND captures established momentum without
-         requiring a same-bar cross event, which is too rare to combine
-         with the other filters)
-      4. RSI in 55-70 (bullish without being overbought; the 70-75 zone
-         was producing late-entry losers in v2)
-      5. bb_position > 0.65 (price actively breaking out, not mid-range)
-      6. volume_spike=true (real breakout, not chop)
-
-    No SELL emission — exits via SL/TP only.
-    """
-    rsi = float(indicators.get("rsi", 50))
-    macd_hist = float(indicators.get("macd_hist", 0))
-    bb_pos = float(indicators.get("bb_position", 0.5))
-    above_ema20 = bool(indicators.get("above_ema20", False))
-    above_ema50 = bool(indicators.get("above_ema50", False))
-    above_ema200 = bool(indicators.get("above_ema200", False))
-    volume_spike = bool(indicators.get("volume_spike", False))
-    price = float(indicators.get("price", 0))
-
-    bullish_stack = above_ema20 and above_ema50 and above_ema200
-
-    # MACD histogram normalized to price scale. A literal threshold doesn't
-    # work across BTC ($78K, hist in dollars) and SHIB ($0.000006, hist
-    # microscopic). 0.0005 = 0.05% of price filters near-zero values.
-    macd_hist_pct = (macd_hist / price) if price > 0 else 0.0
-    macd_meaningful = macd_hist_pct > 0.0005
-
-    if (
-        btc_regime_bullish
-        and bullish_stack
-        and macd_meaningful
-        and 55 <= rsi <= 70
-        and bb_pos > 0.65
-        and volume_spike
-    ):
-        return {
-            "signal": "BUY", "confidence": 0.82,
-            "reasoning": (
-                f"BTC trend OK + bullish stack + MACD hist {macd_hist_pct*100:.3f}% "
-                f"+ RSI {rsi:.0f} + bb {bb_pos:.2f} + volume_spike"
-            ),
-            "key_factors": ["BTC regime", "EMA stack", "MACD momentum", "volume spike"],
-            "risk_level": "MEDIUM", "timeframe": "SHORT",
-        }
-
-    return {
-        "signal": "HOLD", "confidence": 0.50,
-        "reasoning": "no high-conviction setup",
-        "key_factors": [],
-        "risk_level": "LOW", "timeframe": "SHORT",
-    }
 
 
 # ─── BRAIN MODE (cached) ────────────────────────────────────────────────────

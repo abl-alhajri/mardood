@@ -36,6 +36,13 @@ CLAUDE_MODEL                = "claude-sonnet-4-6"
 SIGNAL_CONFIDENCE_THRESHOLD = 0.55
 MAX_POSITION_SIZE_PCT       = 0.30
 SCAN_INTERVAL_MINUTES       = 2
+
+# Shadow mode: log brain and heuristic decisions to shadow_decisions
+# but skip opening new paper-trading positions. Existing positions are
+# still managed (SL/TP exits run normally so they can close out).
+# Flip to True to observe brain-vs-heuristic divergence on live data
+# without compounding live trades.
+SHADOW_MODE                 = False
 REPORT_TIME                 = "08:00"
 TIMEZONE                    = "Asia/Dubai"
 XYZTRADINGAE_PHASE          = 2

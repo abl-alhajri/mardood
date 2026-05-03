@@ -7,7 +7,7 @@ import time
 from rich.console import Console
 from rich.panel import Panel
 
-from config import SCAN_INTERVAL_MINUTES, TIMEZONE, XYZTRADINGAE_PHASE
+from config import SCAN_INTERVAL_MINUTES, TIMEZONE, XYZTRADINGAE_PHASE, SHADOW_MODE
 from signals.generator import run_full_scan
 from alerts.notifier import send_signals, send_telegram
 from memory.trade_log import log_signals
@@ -65,8 +65,8 @@ def run_scan():
         log_signals(signals)
         send_signals(signals)
 
-        # Paper trading
-        if XYZTRADINGAE_PHASE >= 2:
+        # Paper trading — skipped in SHADOW_MODE
+        if XYZTRADINGAE_PHASE >= 2 and not SHADOW_MODE:
             console.print("\n[cyan]📝 Executing paper trades...[/cyan]")
             for signal in signals:
                 price = get_current_price(signal["symbol"], signal["asset_type"])
@@ -90,6 +90,8 @@ def run_scan():
 
             perf = get_performance_summary()
             console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
+        elif SHADOW_MODE:
+            console.print("\n[yellow]🔭 SHADOW_MODE active — decisions logged to shadow_decisions, no new trades opened[/yellow]")
     else:
         console.print("\n[yellow]No high-confidence signals this scan.[/yellow]")
 
