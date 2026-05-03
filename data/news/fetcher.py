@@ -1,8 +1,11 @@
 """
-Mardood — News & Data Sources
+XYZTradingAE — News & Data Sources
 Finnhub, CoinGecko (with retry), mempool.space, alternative.me, Google Trends
 """
 import os
+import time
+import threading
+from functools import wraps
 import requests
 from dotenv import load_dotenv
 from data.crypto.fetcher import coingecko_get
@@ -14,6 +17,52 @@ load_dotenv()
 
 FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
 TWITTER_BEARER = os.getenv("TWITTER_BEARER_TOKEN")
+
+
+# ─── SCAN-SCOPED TTL CACHE ──────────────────────────────────────────────────
+#
+# Many context functions (Fear & Greed, BTC mempool, CoinGecko trending, etc.)
+# return identical results for every symbol within one scan. Previously they
+# were re-fetched 11x per scan. This cache, with a TTL just over one scan
+# duration, deduplicates them down to once per scan.
+#
+# Uses double-checked locking with a per-key fetch lock so 8 concurrent
+# ThreadPoolExecutor workers don't all miss the cache and stampede the API
+# at the start of each scan.
+
+_news_cache: dict[tuple, tuple[float, object]] = {}
+_news_cache_lock = threading.Lock()
+_news_fetch_locks: dict[tuple, threading.Lock] = {}
+
+
+def _cached(ttl_seconds: int):
+    """Thread-safe TTL cache decorator. Serializes concurrent misses on the same key."""
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = (fn.__name__, args, tuple(sorted(kwargs.items())))
+            now = time.time()
+
+            # Fast path: return cached value if still fresh.
+            with _news_cache_lock:
+                hit = _news_cache.get(key)
+                if hit and now - hit[0] < ttl_seconds:
+                    return hit[1]
+                fl = _news_fetch_locks.setdefault(key, threading.Lock())
+
+            # Serialize concurrent misses so only one thread fetches per key.
+            with fl:
+                with _news_cache_lock:
+                    hit = _news_cache.get(key)
+                    if hit and time.time() - hit[0] < ttl_seconds:
+                        return hit[1]
+
+                result = fn(*args, **kwargs)
+                with _news_cache_lock:
+                    _news_cache[key] = (time.time(), result)
+                return result
+        return wrapper
+    return deco
 
 
 # ─── FINNHUB (stocks) ───────────────────────────────────────────────────────
@@ -89,6 +138,7 @@ def get_crypto_news(symbol: str) -> str:
         return "Community sentiment unavailable."
 
 
+@_cached(ttl_seconds=120)  # market-wide; identical for every symbol in a scan
 def get_coingecko_trending() -> str:
     try:
         d = coingecko_get("/search/trending")
@@ -108,7 +158,7 @@ def get_reddit_headlines(symbol: str, limit: int = 5) -> list[str]:
         r = requests.get(
             "https://www.reddit.com/r/CryptoCurrency/search.json",
             params={"q": clean, "sort": "new", "restrict_sr": "1", "limit": limit},
-            headers={"User-Agent": "Mardood/1.0"},
+            headers={"User-Agent": "XYZTradingAE/1.0"},
             timeout=10,
         )
         r.raise_for_status()
@@ -126,6 +176,7 @@ def _stock_headlines(ticker: str) -> list[str]:
 
 # ─── GOOGLE TRENDS ──────────────────────────────────────────────────────────
 
+@_cached(ttl_seconds=300)  # the RSS feed only refreshes a few times per day
 def get_google_trends(symbol: str) -> str:
     try:
         clean = symbol.replace("USDT", "")
@@ -146,6 +197,7 @@ def _mempool_get(path: str, *, json_resp: bool = True, timeout: int = 5):
     return r.json() if json_resp else r.text.strip()
 
 
+@_cached(ttl_seconds=120)  # mempool changes second-by-second, but 2-min staleness is fine
 def get_btc_onchain_summary() -> str:
     """Market-wide BTC on-chain snapshot — useful context for any crypto signal."""
     try:
@@ -192,6 +244,7 @@ def get_btc_onchain_summary() -> str:
     return "\n".join(lines)
 
 
+@_cached(ttl_seconds=120)
 def get_eth_onchain_summary() -> str:
     try:
         r = requests.get("https://beaconcha.in/api/v1/execution/gasnow", timeout=5)
@@ -213,6 +266,7 @@ def get_onchain_data(symbol: str) -> str:
 
 # ─── FEAR & GREED (alternative.me, with trend) ──────────────────────────────
 
+@_cached(ttl_seconds=300)  # alternative.me updates the index ~daily
 def get_fear_greed_index() -> str:
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=8", timeout=5)

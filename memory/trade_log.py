@@ -1,5 +1,5 @@
 """
-Mardood — Trade Memory
+XYZTradingAE — Trade Memory
 Stores all signals and trades in a local SQLite database.
 """
 import sqlite3
@@ -18,6 +18,9 @@ def get_conn():
 def init_db():
     """Create tables if they don't exist."""
     with get_conn() as conn:
+        # WAL: concurrent reader + writer (dashboard + scanner) without locking.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS signals (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -7,16 +7,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY      = os.getenv("GEMINI_API_KEY")
-ALPACA_API_KEY      = os.getenv("ALPACA_API_KEY")
-ALPACA_SECRET_KEY   = os.getenv("ALPACA_SECRET_KEY")
-ALPACA_BASE_URL     = os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
-BINANCE_API_KEY     = os.getenv("BINANCE_API_KEY")
-BINANCE_SECRET_KEY  = os.getenv("BINANCE_SECRET_KEY")
-NEWS_API_KEY        = os.getenv("NEWS_API_KEY")
+# API keys actually used by the codebase
 TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID    = os.getenv("TELEGRAM_CHAT_ID")
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+FINNHUB_API_KEY     = os.getenv("FINNHUB_API_KEY")
+# ANTHROPIC_API_KEY is read directly via os.getenv in analysis/brain.py
 
 CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "SOLUSDT",
@@ -38,7 +34,7 @@ MAX_POSITION_SIZE_PCT       = 0.30
 SCAN_INTERVAL_MINUTES       = 2
 REPORT_TIME                 = "08:00"
 TIMEZONE                    = "Asia/Dubai"
-MARDOOD_PHASE               = 2
+XYZTRADINGAE_PHASE          = 2
 
 # --- Scalping risk profile ----------------------------------------------
 # Default % stops/targets — used as a fallback when ATR isn't available.
@@ -70,6 +66,14 @@ SLIPPAGE_PCT_MAJOR   = 0.0005   # 0.05% per side for liquid majors
 SLIPPAGE_PCT_MEME    = 0.002    # 0.2% per side for meme coins
 
 BASE_DIR    = pathlib.Path(__file__).parent
-MEMORY_DB   = BASE_DIR / "memory" / "mardood.db"
+MEMORY_DB   = BASE_DIR / "memory" / "xyztradingae.db"
 LOGS_DIR    = BASE_DIR / "logs"
 REPORTS_DIR = BASE_DIR / "reports" / "output"
+
+# Rebrand migration: rename the legacy mardood.db -> xyztradingae.db once.
+# Runs at the first config import in any process. Safe and idempotent.
+_legacy_db = BASE_DIR / "memory" / "mardood.db"
+if _legacy_db.exists() and not MEMORY_DB.exists():
+    MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
+    _legacy_db.rename(MEMORY_DB)
+    print(f"[config] DB migrated: {_legacy_db.name} -> {MEMORY_DB.name}", flush=True)

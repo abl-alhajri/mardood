@@ -6,15 +6,18 @@ import schedule
 import time
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
-from config import SCAN_INTERVAL_MINUTES, TIMEZONE, MARDOOD_PHASE
+from config import SCAN_INTERVAL_MINUTES, TIMEZONE, XYZTRADINGAE_PHASE
 from signals.generator import run_full_scan
 from alerts.notifier import send_signals, send_telegram
-from memory.trade_log import log_signals, get_recent_signals, get_stats
-from execution.paper_trader import execute_paper_trade, get_performance_summary, check_stop_loss_take_profit
-from data.stocks.fetcher import get_stock_data
-from data.crypto.fetcher import get_crypto_price
+from memory.trade_log import log_signals
+from execution.paper_trader import (
+    execute_paper_trade,
+    get_performance_summary,
+    check_stop_loss_take_profit,
+    get_portfolio,
+)
+from data.crypto.fetcher import get_live_price
 
 console = Console()
 
@@ -22,19 +25,16 @@ console = Console()
 def print_banner():
     console.print(Panel.fit(
         "[bold cyan]🤖  X Y Z T R A D I N G A E[/bold cyan]\n"
-        "[dim]AI Trading Agent — US Stocks & Crypto[/dim]\n"
-        f"[dim]Phase {MARDOOD_PHASE} · {TIMEZONE}[/dim]",
+        "[dim]AI Trading Agent — Crypto[/dim]\n"
+        f"[dim]Phase {XYZTRADINGAE_PHASE} · {TIMEZONE}[/dim]",
         border_style="cyan"
     ))
 
 
-def get_current_price(symbol, asset_type):
+def get_current_price(symbol: str, asset_type: str = "crypto"):
+    """Live price for a single symbol. Routes through the same source as OHLCV."""
     try:
-        if asset_type == "stock":
-            df = get_stock_data(symbol, period="1d", interval="1m")
-            return float(df["close"].iloc[-1])
-        else:
-            return get_crypto_price(symbol)
+        return get_live_price(symbol)
     except Exception as e:
         console.print(f"  [red]✗ Price fetch failed for {symbol}: {e}[/red]")
         return None
@@ -44,8 +44,7 @@ def run_scan():
     console.rule("[cyan]Market Scan[/cyan]")
 
     # Run SL/TP exits on currently open positions before scanning for new entries
-    if MARDOOD_PHASE >= 2:
-        from execution.paper_trader import get_portfolio
+    if XYZTRADINGAE_PHASE >= 2:
         open_syms = {p["symbol"]: p["asset_type"] for p in get_portfolio()["positions"]}
         if open_syms:
             current_prices = {}
@@ -67,7 +66,7 @@ def run_scan():
         send_signals(signals)
 
         # Paper trading
-        if MARDOOD_PHASE >= 2:
+        if XYZTRADINGAE_PHASE >= 2:
             console.print("\n[cyan]📝 Executing paper trades...[/cyan]")
             for signal in signals:
                 price = get_current_price(signal["symbol"], signal["asset_type"])

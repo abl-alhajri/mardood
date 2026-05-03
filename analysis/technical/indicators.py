@@ -1,7 +1,7 @@
 """
-XYZTradingAE — Technical Indicators (no external libraries needed)
+XYZTradingAE — Technical Indicators
 Calculates RSI, MACD, Bollinger Bands, EMA, ATR, and volume-spike
-ratios manually using pandas only.
+ratios manually using pandas only (no external indicator library).
 """
 import pandas as pd
 from config import VOLUME_SPIKE_RATIO

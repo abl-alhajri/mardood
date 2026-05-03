@@ -1,42 +1,25 @@
 # =============================================
-# MARDOOD — Python Dependencies
+# XYZTRADINGAE — Python Dependencies
 # =============================================
+# All HTTP integrations (Coinbase, CoinGecko, mempool.space, alternative.me,
+# Telegram, Hugging Face, Reddit) go through `requests`. The previous
+# wrapper packages (yfinance, alpaca-py, python-binance, pycoingecko,
+# python-telegram-bot, pandas-ta, newsapi-python, plotly, kaleido) were
+# never imported and are gone.
 
 # Core
-anthropic>=0.25.0          # Claude API (the brain)
+anthropic>=0.40.0          # Claude API (needs cache_control + tool_use support)
 python-dotenv>=1.0.0       # Load .env file
 flask>=3.0.0               # Web dashboard
 
-# Data fetching — stocks
-yfinance>=0.2.40           # Yahoo Finance (free, no key needed)
-alpaca-py>=0.20.0          # Alpaca Markets API
-
-# Data fetching — crypto
-python-binance>=1.0.19     # Binance API
-pycoingecko>=3.1.0         # CoinGecko API (free tier available)
-
-# Technical analysis
-pandas-ta>=0.3.14b         # RSI, MACD, Bollinger, EMA and 130+ indicators
+# Data + analysis
 pandas>=2.0.0
 numpy>=1.26.0
-
-# News & sentiment
-newsapi-python>=0.2.7      # NewsAPI
 requests>=2.31.0
 
-# Charts & reports
-plotly>=5.20.0             # Interactive charts
-kaleido>=0.2.1             # Save plotly charts as images
-
-# Alerts
-python-telegram-bot>=21.0  # Telegram notifications
-
-# Storage
-# SQLite is built into Python — no extra install needed
-
-# Scheduling (run Mardood on a timer)
+# Scheduling & terminal UI
 schedule>=1.2.1
+pytz>=2024.1
+rich>=13.7.0
 
-# Utilities
-pytz>=2024.1               # Timezone handling
-rich>=13.7.0               # Beautiful terminal output
+# SQLite is built into Python — no extra install needed.

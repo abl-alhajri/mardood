@@ -50,6 +50,10 @@ def _ensure_column(conn, table: str, col: str, col_def: str):
 def init_paper_trading():
     """Create tables and apply schema migrations."""
     with get_conn() as conn:
+        # WAL mode lets the dashboard read while the scanner writes without
+        # 'database is locked' errors. Persists per database file.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")  # safe with WAL, faster writes
         conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio (
                 id           INTEGER PRIMARY KEY,

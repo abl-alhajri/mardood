@@ -1,5 +1,5 @@
 """
-Mardood — Alert System
+XYZTradingAE — Alert System
 Sends trading signals to Telegram.
 """
 import requests
@@ -13,7 +13,7 @@ def format_signal_message(signal: dict) -> str:
     tf_label = {"SHORT": "Short-term", "MEDIUM": "Swing", "LONG": "Long-term"}.get(signal.get("timeframe"), "—")
 
     lines = [
-        f"{s_emoji} *MARDOOD SIGNAL*",
+        f"{s_emoji} *XYZTRADINGAE SIGNAL*",
         "",
         f"*{signal.get('symbol')}* ({signal.get('asset_type', '').upper()})",
         f"Signal: *{signal.get('signal')}*",
@@ -75,9 +75,9 @@ def send_signal_alert(signal: dict) -> bool:
 def send_signals(signals: list) -> None:
     """Send all high-confidence signals, or a no-signal message."""
     if not signals:
-        send_telegram("🤖 *Mardood scan complete*\nNo high\\-confidence signals right now\\.")
+        send_telegram("🤖 *XYZTradingAE scan complete*\nNo high-confidence signals right now.")
         return
 
-    send_telegram(f"🤖 *Mardood found {len(signals)} signal(s)*")
+    send_telegram(f"🤖 *XYZTradingAE found {len(signals)} signal(s)*")
     for signal in signals:
         send_signal_alert(signal)

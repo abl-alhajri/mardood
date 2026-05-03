@@ -1,5 +1,5 @@
 """
-Mardood — Hugging Face sentiment models
+XYZTradingAE — Hugging Face sentiment models
 
 ProsusAI/finbert  — financial sentiment (positive / negative / neutral)
 ElKulako/cryptobert — crypto-native sentiment (Bullish / Bearish / Neutral)

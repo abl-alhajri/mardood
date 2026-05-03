@@ -1,5 +1,5 @@
 """
-Mardood — Crypto Data Fetcher (CoinGecko)
+XYZTradingAE — Crypto Data Fetcher (Coinbase + CoinGecko)
 """
 import time
 import random
@@ -199,12 +199,28 @@ def get_simple_prices(symbols: list[str]) -> dict:
 
 
 def get_crypto_price(symbol: str) -> float:
+    """CoinGecko fallback for symbols Coinbase doesn't carry."""
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")
 
     data = coingecko_get("/simple/price", {"ids": coin_id, "vs_currencies": "usd"})
     return float(data[coin_id]["usd"])
+
+
+def get_live_price(symbol: str) -> float:
+    """
+    Live USD price for a single symbol. Routes through the SAME source
+    as get_crypto_ohlcv: Coinbase ticker for the 6 majors, CoinGecko
+    fallback for everything else. Keeps the brain, paper trader, and
+    dashboard reasoning on prices from the same exchange so SL/TP
+    triggers don't fire on cross-source price drift.
+    """
+    if symbol in COINBASE_SYMBOLS:
+        product_id = COINBASE_SYMBOLS[symbol]
+        d = coinbase_get(f"/products/{product_id}/ticker", timeout=5)
+        return float(d["price"])
+    return get_crypto_price(symbol)
 
 
 def get_watchlist_data(days: int = 1) -> dict:
