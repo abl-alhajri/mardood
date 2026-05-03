@@ -56,6 +56,10 @@ class Trade:
 class Simulator:
     starting_cash: float = 10000.0
     cash: float = 10000.0
+    # Optional override for FEE_PCT_PER_SIDE — useful for testing
+    # maker-only economics (set to 0.0) or higher-fee scenarios.
+    # None means "use the config default".
+    fee_pct_per_side: Optional[float] = None
     open_positions: dict[str, Position] = field(default_factory=dict)
     closed_trades: list[Trade] = field(default_factory=list)
     equity_curve: list[tuple[pd.Timestamp, float]] = field(default_factory=list)
@@ -85,7 +89,8 @@ class Simulator:
         return SLIPPAGE_PCT_MEME if symbol in MEME_SYMBOLS else SLIPPAGE_PCT_MAJOR
 
     def _friction(self, symbol: str) -> float:
-        return FEE_PCT_PER_SIDE + self._slippage(symbol)
+        fee = self.fee_pct_per_side if self.fee_pct_per_side is not None else FEE_PCT_PER_SIDE
+        return fee + self._slippage(symbol)
 
     def _compute_stops(self, price: float, atr_pct: Optional[float]) -> tuple[float, float, float, float]:
         if atr_pct and atr_pct > 0:

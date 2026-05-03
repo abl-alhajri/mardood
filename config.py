@@ -15,11 +15,14 @@ FINNHUB_API_KEY     = os.getenv("FINNHUB_API_KEY")
 # ANTHROPIC_API_KEY is read directly via os.getenv in analysis/brain.py
 
 CRYPTO_WATCHLIST = [
-    "BTCUSDT", "ETHUSDT", "SOLUSDT",
+    "BTCUSDT", "SOLUSDT",
     "BNBUSDT", "XRPUSDT",
     # DOGE and SHIB removed: 90-day backtest showed combined $-661 loss
     # from 50 trades. Their 0.6% round-trip friction makes scalp RR negative
     # even on winners. Skipping them in scalper mode entirely.
+    # ETH removed: persistent underperformer across v1/v2/v3 backtests
+    # (6.7% / 21.4% / 0% / 11.1% win rates over 90 days). Likely the
+    # heuristic doesn't fit ETH's regime during the test window.
     "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT"
 ]
 

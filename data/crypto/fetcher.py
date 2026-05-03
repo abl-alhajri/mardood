@@ -65,11 +65,11 @@ COINBASE_BASE = "https://api.exchange.coinbase.com"
 
 COINBASE_SYMBOLS = {
     "BTCUSDT":  "BTC-USD",
-    "ETHUSDT":  "ETH-USD",
     "SOLUSDT":  "SOL-USD",
     "XRPUSDT":  "XRP-USD",
     # DOGE/SHIB removed in scalper mode — 0.6% round-trip friction
     # made scalp RR negative even on winners. See backtest analysis.
+    # ETH removed — persistent underperformer (11% win rate in v3.1).
 }
 
 

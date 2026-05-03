@@ -28,7 +28,7 @@ from .simulator import Simulator
 from .metrics import compute_metrics, equity_for_report, trades_for_report
 from .report import render_report
 
-DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
+DEFAULT_SYMBOLS = ["BTCUSDT", "SOLUSDT", "XRPUSDT"]
 REPORTS_DIR = pathlib.Path(__file__).parent / "reports"
 
 
@@ -91,6 +91,7 @@ def run_backtest(
     starting_cash: float,
     confidence_threshold: float,
     force_refresh: bool,
+    fee_override: float | None = None,
 ) -> tuple[Simulator, dict, list[dict], list[dict]]:
     print(f"[backtest] Mode: {mode}  |  Symbols: {symbols}  |  Days: {days}  "
           f"|  Sample every: {sample_every} candles", flush=True)
@@ -111,7 +112,10 @@ def run_backtest(
     print(f"[backtest] BTC regime bullish: {btc_regime.sum():,}/{len(btc_regime):,} "
           f"5m candles ({btc_regime.mean()*100:.1f}% of timeline)", flush=True)
 
-    sim = Simulator(starting_cash=starting_cash)
+    sim = Simulator(starting_cash=starting_cash, fee_pct_per_side=fee_override)
+    if fee_override is not None:
+        print(f"[backtest] FEE override active: {fee_override*100:.3f}% per side "
+              f"(default is {0.001*100:.3f}%)", flush=True)
     brain_cache = BrainCache() if mode == "brain" else None
 
     # Per-symbol cursor index for fast row lookup
@@ -217,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--starting-cash", type=float, default=10000.0)
     parser.add_argument("--force-refresh", action="store_true",
                        help="Bypass the OHLCV cache and re-fetch from Coinbase")
+    parser.add_argument("--fee-pct-per-side", type=float, default=None,
+                       help="Override FEE_PCT_PER_SIDE for this run (e.g. 0.0 for maker-only)")
     parser.add_argument("--output", default=None,
                        help="Output HTML path (default: backtest/reports/report_<ts>.html)")
     args = parser.parse_args(argv)
@@ -239,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         starting_cash=args.starting_cash,
         confidence_threshold=args.confidence_threshold,
         force_refresh=args.force_refresh,
+        fee_override=args.fee_pct_per_side,
     )
 
     if args.output:
