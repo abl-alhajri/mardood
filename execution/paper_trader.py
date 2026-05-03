@@ -242,10 +242,9 @@ def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
     open_count = len(open_positions)
     meme_count = sum(1 for s in open_positions if s in MEME_SYMBOLS)
 
-    # SELL: close existing position
-    if sig == "SELL" and symbol in open_positions:
-        return close_position(open_positions[symbol], current_price, "SELL signal")
-
+    # SELL signals are now ignored — backtest showed they were closing
+    # winners early and locking in losses (12 SELL exits, 0% win rate).
+    # All exits go through SL/TP via check_stop_loss_take_profit.
     if sig != "BUY":
         return None
 

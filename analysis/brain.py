@@ -184,11 +184,15 @@ MEME COIN ADJUSTMENTS (DOGE, SHIB, PEPE, WIF, BONK, FLOKI):
 - Cap meme BUY confidence at 0.82 even when all signals align.
 - A meme that has rallied 10%+ in the past 2 candles (1 hour) with rising RSI is LATE — strong HOLD bias.
 
-SELL SIGNAL DISCIPLINE:
-- The executor closes longs on SELL only if a position exists. SELL on a non-held symbol is a no-op.
-- Emit SELL only when you see a clear reversal: bearish MACD histogram cross, price losing EMA20 with rising volume, RSI rolling over from 75+. Confidence > 0.65.
-- DON'T emit SELL at 0.45 — that creates churn with no informational value. The signal-confidence threshold (0.55) will filter it out anyway.
-- Stop-losses and take-profits are HANDLED BY THE EXECUTOR automatically on each scan. You don't need to "exit on time" — that's machinery, not your job.
+SIGNAL CHOICES (post-backtest policy):
+- BUY: open a long when you see a high-conviction setup.
+- HOLD: default. The executor manages exits via SL/TP automatically.
+- SELL: NOT USED. Backtests showed SELL signals were closing winners early
+  (12 SELL exits in 90d, 0% win rate, $-149 drag). The executor now IGNORES
+  SELL signals entirely. Don't emit them.
+- All exits — SL hits, TP hits, end-of-life — are handled by the executor.
+  You only decide entries. Stop-losses and take-profits are MACHINERY,
+  not your job.
 
 OUTPUT REQUIREMENT
 Always emit your decision via the `record_signal` tool. Do not respond with prose. The reasoning field should reference specific NUMBERS from the technical layer (e.g., "macd_crossed_up=true with histogram +0.0023 widening, RSI 62 reclaiming above EMA20 at $1.82, F&G 38 trending up"), not generic descriptions like "bullish setup" or "momentum looks good". Concrete > vague."""

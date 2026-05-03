@@ -62,14 +62,9 @@ def heuristic_decision(indicators: dict) -> dict:
             "key_factors": ["EMA stack", "MACD cross"],
             "risk_level": "MEDIUM", "timeframe": "SHORT",
         }
-    # Sell: bearish reversal
-    if bearish_stack and macd_hist < 0 and rsi < 50:
-        return {
-            "signal": "SELL", "confidence": 0.70,
-            "reasoning": f"bearish stack + MACD hist {macd_hist:.4f} + RSI {rsi:.0f}",
-            "key_factors": ["bearish stack", "MACD negative"],
-            "risk_level": "MEDIUM", "timeframe": "SHORT",
-        }
+    # No SELL emission. Backtest showed SELL exits had 0% win rate (12/12 losses,
+    # $-149 drag) — they were closing winners on first whiff of weakness instead
+    # of catching reversals. All exits now go through SL/TP only.
     return {
         "signal": "HOLD", "confidence": 0.50,
         "reasoning": "no clean setup",

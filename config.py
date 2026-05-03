@@ -17,15 +17,16 @@ FINNHUB_API_KEY     = os.getenv("FINNHUB_API_KEY")
 CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "SOLUSDT",
     "BNBUSDT", "XRPUSDT",
-    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT",
-    "WIFUSDT", "BONKUSDT", "FLOKIUSDT"
+    # DOGE and SHIB removed: 90-day backtest showed combined $-661 loss
+    # from 50 trades. Their 0.6% round-trip friction makes scalp RR negative
+    # even on winners. Skipping them in scalper mode entirely.
+    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT"
 ]
 
 # Meme coins are treated as one bucket for concurrent-position caps —
 # they're correlated and should not consume more than one risk slot.
 MEME_SYMBOLS = {
-    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT",
-    "WIFUSDT",  "BONKUSDT", "FLOKIUSDT",
+    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
 }
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
@@ -44,10 +45,14 @@ TAKE_PROFIT_PCT     = 0.015    # 1.5%  (3 * SL)
 
 # ATR-based stops (preferred when atr_pct is on the signal). Distances
 # scale with realised volatility on 5-min candles but are bounded.
+# Bounds widened after backtest analysis: the prior 0.3% floor + 0.3%
+# friction collapsed effective RR from nominal 3:1 to 1:1, demanding
+# 50% win rate to break even (achieved 22.6%). New 1.0% floor + 0.3%
+# friction yields effective 2.07:1, ~32.5% break-even.
 ATR_SL_MULTIPLIER   = 1.5
 ATR_RR_MULTIPLIER   = 3.0
-MIN_SL_PCT          = 0.003    # 0.3% — 5m candles have small ATR
-MAX_SL_PCT          = 0.015    # 1.5% — scalp-tight ceiling
+MIN_SL_PCT          = 0.010    # was 0.003 — 1.0% floor gives friction room
+MAX_SL_PCT          = 0.030    # was 0.015 — wider ceiling for high-vol regimes
 
 # Volume-spike detection threshold (used by indicators)
 VOLUME_SPIKE_RATIO  = 2.0      # current candle volume / 20-candle avg

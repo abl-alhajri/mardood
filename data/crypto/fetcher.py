@@ -68,8 +68,8 @@ COINBASE_SYMBOLS = {
     "ETHUSDT":  "ETH-USD",
     "SOLUSDT":  "SOL-USD",
     "XRPUSDT":  "XRP-USD",
-    "DOGEUSDT": "DOGE-USD",
-    "SHIBUSDT": "SHIB-USD",
+    # DOGE/SHIB removed in scalper mode — 0.6% round-trip friction
+    # made scalp RR negative even on winners. See backtest analysis.
 }
 
 

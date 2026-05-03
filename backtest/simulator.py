@@ -131,14 +131,11 @@ class Simulator:
                 self._close(pos, ts, pos.take_profit, "Take-profit hit (wick)")
 
     def try_open(self, symbol: str, signal: dict, ts: pd.Timestamp, price: float) -> str:
-        """Apply signal. Returns 'OPENED', 'CLOSED', 'SKIPPED:<reason>', or 'NOOP'."""
+        """Apply signal. Returns 'OPENED', 'SKIPPED:<reason>', or 'NOOP'."""
         sig = signal.get("signal", "HOLD")
         atr_pct = signal.get("atr_pct")
 
-        if sig == "SELL" and symbol in self.open_positions:
-            self._close(self.open_positions[symbol], ts, price, "SELL signal")
-            return "CLOSED"
-
+        # SELL signals are ignored — see paper_trader.execute_paper_trade for rationale.
         if sig != "BUY":
             return "NOOP"
 

@@ -28,7 +28,7 @@ from .simulator import Simulator
 from .metrics import compute_metrics, equity_for_report, trades_for_report
 from .report import render_report
 
-DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "SHIBUSDT"]
+DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 REPORTS_DIR = pathlib.Path(__file__).parent / "reports"
 
 
