@@ -55,10 +55,32 @@ def _unified_timeline(per_symbol: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:
 
 
 def _decide(mode: str, symbol: str, candle_ts, indicators: dict,
-           cache: BrainCache | None) -> dict:
+           cache: BrainCache | None, btc_regime_bullish: bool) -> dict:
     if mode == "brain":
-        return brain_decision(symbol, candle_ts.isoformat(), indicators, cache)
-    return heuristic_decision(indicators)
+        # For brain mode, surface the regime as an extra indicator key so
+        # the prompt can read it; brain doesn't otherwise have access.
+        ind_with_regime = dict(indicators)
+        ind_with_regime["btc_regime_bullish"] = btc_regime_bullish
+        return brain_decision(symbol, candle_ts.isoformat(), ind_with_regime, cache)
+    return heuristic_decision(indicators, btc_regime_bullish=btc_regime_bullish)
+
+
+def _compute_btc_regime(btc_5m_df: pd.DataFrame) -> pd.Series:
+    """
+    Returns a bool Series indexed by 5m timestamps: True when BTC is
+    above its 1h EMA200 at the time of decision.
+
+    No look-ahead: the 1h regime is shifted forward by 1 hour before
+    reindexing back to 5m, so the regime at 5m timestamp T uses BTC
+    1h EMA200 computed from data strictly before T.
+    """
+    btc_1h = btc_5m_df["close"].resample("1h").last().dropna()
+    ema200_1h = btc_1h.ewm(span=200, adjust=False).mean()
+    regime_1h = (btc_1h > ema200_1h).astype(bool)
+    # Shift forward 1 hour: the regime AT hour H is computed from data UP TO H-1
+    regime_1h_shifted = regime_1h.shift(1).fillna(False)
+    regime_5m = regime_1h_shifted.reindex(btc_5m_df.index, method="ffill").fillna(False)
+    return regime_5m.astype(bool)
 
 
 def run_backtest(
@@ -80,6 +102,14 @@ def run_backtest(
     timeline = _unified_timeline(per_symbol)
     if timeline.empty:
         raise RuntimeError("Empty timeline after indicator warm-up.")
+
+    # BTC regime filter: any alt entry requires BTC above its 1h EMA200.
+    btc_df = per_symbol.get("BTCUSDT")
+    if btc_df is None:
+        raise RuntimeError("BTCUSDT data is required for the BTC regime filter.")
+    btc_regime = _compute_btc_regime(btc_df)
+    print(f"[backtest] BTC regime bullish: {btc_regime.sum():,}/{len(btc_regime):,} "
+          f"5m candles ({btc_regime.mean()*100:.1f}% of timeline)", flush=True)
 
     sim = Simulator(starting_cash=starting_cash)
     brain_cache = BrainCache() if mode == "brain" else None
@@ -131,8 +161,13 @@ def run_backtest(
             indicators["interval_minutes"] = 5
             indicators["volume_available"] = True
 
+            # Look up BTC regime at this timestamp (no look-ahead — series
+            # was shifted forward 1 hour at construction).
+            regime_val = btc_regime.asof(ts)
+            btc_regime_bullish = bool(regime_val) if pd.notna(regime_val) else False
+
             try:
-                signal = _decide(mode, sym, ts, indicators, brain_cache)
+                signal = _decide(mode, sym, ts, indicators, brain_cache, btc_regime_bullish)
             except Exception as e:
                 print(f"[backtest] decide({sym} @ {ts}) failed: {e}", flush=True)
                 continue

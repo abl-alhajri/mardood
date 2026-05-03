@@ -64,11 +64,16 @@ class Simulator:
     daily_start_value: float = 10000.0
     daily_start_date: Optional[str] = None
 
+    # Cooldown after a stop-out: don't re-enter the same symbol for N minutes
+    last_stop_out: dict[str, pd.Timestamp] = field(default_factory=dict)
+    cooldown_minutes: int = 60
+
     # Tracking
     rejected_for_dd: int = 0
     rejected_for_concurrent_cap: int = 0
     rejected_for_meme_cap: int = 0
     rejected_for_already_long: int = 0
+    rejected_for_cooldown: int = 0
 
     def __post_init__(self):
         self.cash = self.starting_cash
@@ -145,6 +150,17 @@ class Simulator:
             self.skip_log.append((ts, symbol, "already long"))
             return "SKIPPED:already_long"
 
+        # Cooldown: don't re-enter a symbol within N minutes of a stop-out.
+        # Stop-outs imply the local trend just rolled — re-entering immediately
+        # tends to stack into the same losing setup.
+        if symbol in self.last_stop_out:
+            elapsed_min = (ts - self.last_stop_out[symbol]).total_seconds() / 60
+            if elapsed_min < self.cooldown_minutes:
+                self.rejected_for_cooldown += 1
+                self.skip_log.append(
+                    (ts, symbol, f"cooldown ({elapsed_min:.0f}/{self.cooldown_minutes} min)"))
+                return "SKIPPED:cooldown"
+
         if len(self.open_positions) >= MAX_CONCURRENT_POSITIONS:
             self.rejected_for_concurrent_cap += 1
             self.skip_log.append((ts, symbol, f"max concurrent ({MAX_CONCURRENT_POSITIONS})"))
@@ -204,6 +220,9 @@ class Simulator:
             exit_reason=reason,
         ))
         self.cash += exit_proceeds
+        # Trip the cooldown clock if this was a stop-out (not a TP or end-of-test)
+        if reason.startswith("Stop-loss"):
+            self.last_stop_out[pos.symbol] = ts
         del self.open_positions[pos.symbol]
 
     def force_close_all(self, ts: pd.Timestamp, mark_prices: dict[str, float]):

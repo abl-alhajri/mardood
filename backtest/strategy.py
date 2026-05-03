@@ -25,49 +25,63 @@ CACHE_DB = pathlib.Path(__file__).parent / "cache" / "brain.db"
 
 # ─── HEURISTIC MODE ─────────────────────────────────────────────────────────
 
-def heuristic_decision(indicators: dict) -> dict:
+def heuristic_decision(indicators: dict, btc_regime_bullish: bool = True) -> dict:
     """
-    Cheap rule-based stand-in for the brain. Mirrors the production
-    decision-framework's "two confirming layers" gate:
-      - Bullish stack + RSI 50-70 + MACD widening + volume_spike => high-conf BUY
-      - Bullish stack + MACD crossed up                         => mid-conf BUY
-      - Bearish reversal across 3 indicators                    => SELL
-      - Otherwise                                                => HOLD
+    Single high-conviction BUY path. After 90d backtest analysis, the
+    prior two-tier emission produced too many low-quality setups. This
+    version requires SIX confirming layers in conjunction:
+
+      1. BTC regime: BTC above its 1h EMA200 (broad market trending up)
+      2. Bullish EMA stack on the symbol (price > EMA20 > EMA50 > EMA200)
+      3. MACD histogram meaningfully positive (> 0.05% of price — filters
+         micro-crosses near zero AND captures established momentum without
+         requiring a same-bar cross event, which is too rare to combine
+         with the other filters)
+      4. RSI in 55-70 (bullish without being overbought; the 70-75 zone
+         was producing late-entry losers in v2)
+      5. bb_position > 0.65 (price actively breaking out, not mid-range)
+      6. volume_spike=true (real breakout, not chop)
+
+    No SELL emission — exits via SL/TP only.
     """
     rsi = float(indicators.get("rsi", 50))
     macd_hist = float(indicators.get("macd_hist", 0))
-    macd_crossed_up = bool(indicators.get("macd_crossed_up", False))
     bb_pos = float(indicators.get("bb_position", 0.5))
     above_ema20 = bool(indicators.get("above_ema20", False))
     above_ema50 = bool(indicators.get("above_ema50", False))
     above_ema200 = bool(indicators.get("above_ema200", False))
     volume_spike = bool(indicators.get("volume_spike", False))
+    price = float(indicators.get("price", 0))
 
     bullish_stack = above_ema20 and above_ema50 and above_ema200
-    bearish_stack = (not above_ema20) and (not above_ema50)
 
-    # Confirmed-breakout long
-    if bullish_stack and macd_crossed_up and 50 <= rsi <= 75 and bb_pos > 0.6 and volume_spike:
+    # MACD histogram normalized to price scale. A literal threshold doesn't
+    # work across BTC ($78K, hist in dollars) and SHIB ($0.000006, hist
+    # microscopic). 0.0005 = 0.05% of price filters near-zero values.
+    macd_hist_pct = (macd_hist / price) if price > 0 else 0.0
+    macd_meaningful = macd_hist_pct > 0.0005
+
+    if (
+        btc_regime_bullish
+        and bullish_stack
+        and macd_meaningful
+        and 55 <= rsi <= 70
+        and bb_pos > 0.65
+        and volume_spike
+    ):
         return {
             "signal": "BUY", "confidence": 0.82,
-            "reasoning": f"bullish stack + macd_crossed_up + RSI {rsi:.0f} + bb {bb_pos:.2f} + volume_spike",
-            "key_factors": ["EMA stack", "MACD cross", "volume spike"],
+            "reasoning": (
+                f"BTC trend OK + bullish stack + MACD hist {macd_hist_pct*100:.3f}% "
+                f"+ RSI {rsi:.0f} + bb {bb_pos:.2f} + volume_spike"
+            ),
+            "key_factors": ["BTC regime", "EMA stack", "MACD momentum", "volume spike"],
             "risk_level": "MEDIUM", "timeframe": "SHORT",
         }
-    # Mid-confidence long: stack + cross, no volume confirmation
-    if bullish_stack and macd_crossed_up and rsi > 50:
-        return {
-            "signal": "BUY", "confidence": 0.65,
-            "reasoning": f"bullish stack + macd_crossed_up + RSI {rsi:.0f}, no volume confirm",
-            "key_factors": ["EMA stack", "MACD cross"],
-            "risk_level": "MEDIUM", "timeframe": "SHORT",
-        }
-    # No SELL emission. Backtest showed SELL exits had 0% win rate (12/12 losses,
-    # $-149 drag) — they were closing winners on first whiff of weakness instead
-    # of catching reversals. All exits now go through SL/TP only.
+
     return {
         "signal": "HOLD", "confidence": 0.50,
-        "reasoning": "no clean setup",
+        "reasoning": "no high-conviction setup",
         "key_factors": [],
         "risk_level": "LOW", "timeframe": "SHORT",
     }
