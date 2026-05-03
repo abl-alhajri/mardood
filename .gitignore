@@ -8,3 +8,5 @@ venv/
 logs/
 reports/output/
 .claude/
+backtest/cache/
+backtest/reports/
