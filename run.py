@@ -13,9 +13,24 @@ import sys
 import threading
 import time
 
+# Production: gunicorn with the gthread worker class. One worker (so the
+# in-process price-fetcher + meme-cache aren't duplicated), 8 threads (one
+# per concurrent SSE client + headroom). The /api/stream handler keeps
+# pushing data every 2s, so default --timeout (30s of silence) doesn't
+# fire. SSE keepalive comments cover the 15s+ idle case.
+_PORT = os.environ.get("PORT", "5000")
 CHILDREN = [
-    ("dashboard", [sys.executable, "-u", "dashboard.py"]),
-    ("main",      [sys.executable, "-u", "main.py"]),
+    ("dashboard", [
+        sys.executable, "-m", "gunicorn",
+        "--worker-class", "gthread",
+        "--workers", "1",
+        "--threads", "8",
+        "--bind", f"0.0.0.0:{_PORT}",
+        "--access-logfile", "-",
+        "--error-logfile", "-",
+        "dashboard:app",
+    ]),
+    ("main", [sys.executable, "-u", "main.py"]),
 ]
 
 INITIAL_BACKOFF = 1.0

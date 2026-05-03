@@ -98,6 +98,11 @@ def init_paper_trading():
         _ensure_column(conn, "portfolio", "daily_start_value", "REAL DEFAULT 10000.0")
         _ensure_column(conn, "portfolio", "daily_start_date",  "TEXT")
 
+        # Migration: lock the actual entry cost (cash decreased by) at open
+        # time so future config changes to fees/slippage don't retroactively
+        # distort realized P&L on already-open positions.
+        _ensure_column(conn, "positions", "entry_cost", "REAL")
+
         # Initialize portfolio if empty
         count = conn.execute("SELECT COUNT(*) FROM portfolio").fetchone()[0]
         if count == 0:
@@ -153,7 +158,7 @@ def get_portfolio() -> dict:
         }
         positions = conn.execute(
             "SELECT id, symbol, asset_type, side, quantity, entry_price, "
-            "       stop_loss, take_profit, entry_time, status "
+            "       stop_loss, take_profit, entry_time, status, entry_cost "
             "FROM positions WHERE status='OPEN'"
         ).fetchall()
         portfolio["positions"] = [{
@@ -161,6 +166,7 @@ def get_portfolio() -> dict:
             "quantity": p[4], "entry_price": p[5],
             "stop_loss": p[6], "take_profit": p[7],
             "entry_time": p[8], "status": p[9],
+            "entry_cost": p[10],  # may be NULL for positions opened before this migration
         } for p in positions]
         return portfolio
 
@@ -277,13 +283,16 @@ def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
     sl_price, tp_price, sl_dist, tp_dist = _compute_stops(current_price, atr_pct)
 
     with get_conn() as conn:
+        # entry_cost == position_value by construction: that's exactly what
+        # cash decreases by, friction included. Persisting it locks the open-time
+        # accounting so future fee/slippage config changes don't bleed P&L.
         conn.execute("""
             INSERT INTO positions
                 (symbol, asset_type, side, quantity, entry_price,
-                 stop_loss, take_profit, entry_time)
-            VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?)
+                 stop_loss, take_profit, entry_time, entry_cost)
+            VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?, ?)
         """, (symbol, signal.get("asset_type", ""), quantity,
-              entry_price, sl_price, tp_price, _now()))
+              entry_price, sl_price, tp_price, _now(), position_value))
         conn.execute(
             "UPDATE portfolio SET cash=cash-?, total_trades=total_trades+1, updated_at=? WHERE id=1",
             (position_value, _now()),
@@ -312,9 +321,13 @@ def close_position(position: dict, exit_price_mid: float, reason: str) -> dict:
     entry_mid = position["entry_price"]
     friction = _friction_per_side(symbol)
 
-    # Reconstruct what we paid going in (cash decreased by this amount on open)
-    entry_cost   = qty * entry_mid * (1 + friction)
-    # What we receive coming out, after slippage + fee
+    # Use the persisted entry_cost (locked at open time). Fall back to
+    # recomputing from current friction config for legacy rows that were
+    # opened before the entry_cost column existed.
+    entry_cost = position.get("entry_cost")
+    if entry_cost is None:
+        entry_cost = qty * entry_mid * (1 + friction)
+    # Exit friction is current — that's what we'd actually pay right now.
     exit_proceeds = qty * exit_price_mid * (1 - friction)
     pnl = exit_proceeds - entry_cost
     pnl_pct = (pnl / entry_cost) * 100 if entry_cost > 0 else 0.0
@@ -346,19 +359,46 @@ def close_position(position: dict, exit_price_mid: float, reason: str) -> dict:
 
 
 def check_stop_loss_take_profit(current_prices: dict) -> list:
-    """Check all open positions against fresh prices for SL/TP exits."""
+    """
+    Check all open positions for SL/TP exits.
+
+    For Coinbase symbols, fetches the last 5 minutes of 1-min candles and
+    checks high/low wicks — catches intra-candle SL/TP touches that the
+    2-min spot sample would miss. Falls back to spot-price comparison for
+    CoinGecko-fallback symbols (no granular data available).
+
+    When both SL and TP look hit in the same candle window, conservatively
+    assume SL fired first (worst case for trader, matches real-exchange
+    fill-priority behavior in fast moves).
+    """
+    from data.crypto.fetcher import get_recent_high_low
+
     results = []
     portfolio = get_portfolio()
 
     for pos in portfolio["positions"]:
-        price = current_prices.get(pos["symbol"])
-        if not price:
-            continue
+        sym = pos["symbol"]
+        spot = current_prices.get(sym)
+        sl, tp = pos["stop_loss"], pos["take_profit"]
 
-        if price <= pos["stop_loss"]:
-            results.append(close_position(pos, price, "Stop-loss hit"))
-        elif price >= pos["take_profit"]:
-            results.append(close_position(pos, price, "Take-profit hit"))
+        wick = get_recent_high_low(sym, lookback_minutes=5)
+        if wick is not None:
+            high, low = wick
+            if low <= sl:
+                # SL touched at the candle low — fill at the SL price
+                results.append(close_position(pos, sl, "Stop-loss hit (wick)"))
+                continue
+            if high >= tp:
+                results.append(close_position(pos, tp, "Take-profit hit (wick)"))
+                continue
+        else:
+            # Spot fallback (CoinGecko symbols, or wick fetch failed)
+            if spot is None:
+                continue
+            if spot <= sl:
+                results.append(close_position(pos, spot, "Stop-loss hit"))
+            elif spot >= tp:
+                results.append(close_position(pos, tp, "Take-profit hit"))
 
     return results
 

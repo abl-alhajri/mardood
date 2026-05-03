@@ -208,6 +208,36 @@ def get_crypto_price(symbol: str) -> float:
     return float(data[coin_id]["usd"])
 
 
+def get_recent_high_low(symbol: str, lookback_minutes: int = 5) -> tuple[float, float] | None:
+    """
+    Returns (high, low) over the last `lookback_minutes` for a Coinbase
+    symbol using 1-minute candles. Used to detect SL/TP wicks the spot
+    sample missed between scans. Returns None for non-Coinbase symbols
+    or on fetch failure (caller should fall back to spot).
+    """
+    if symbol not in COINBASE_SYMBOLS:
+        return None
+    product_id = COINBASE_SYMBOLS[symbol]
+    try:
+        data = coinbase_get(
+            f"/products/{product_id}/candles",
+            params={"granularity": 60},  # 1-minute candles
+            timeout=5,
+        )
+    except Exception as e:
+        print(f"[wick-check] {symbol} 1m candles failed: {e}", flush=True)
+        return None
+    if not data:
+        return None
+    # Coinbase returns newest-first: [time, low, high, open, close, volume]
+    recent = data[:lookback_minutes]
+    highs = [float(c[2]) for c in recent]
+    lows = [float(c[1]) for c in recent]
+    if not highs or not lows:
+        return None
+    return max(highs), min(lows)
+
+
 def get_live_price(symbol: str) -> float:
     """
     Live USD price for a single symbol. Routes through the SAME source

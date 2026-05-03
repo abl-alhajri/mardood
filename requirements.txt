@@ -11,6 +11,7 @@
 anthropic>=0.40.0          # Claude API (needs cache_control + tool_use support)
 python-dotenv>=1.0.0       # Load .env file
 flask>=3.0.0               # Web dashboard
+gunicorn>=21.2.0           # Production WSGI server (used by run.py supervisor)
 
 # Data + analysis
 pandas>=2.0.0
