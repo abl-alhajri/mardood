@@ -159,6 +159,11 @@ def run_backtest(
             if candle_indices[sym] % sample_every != 0:
                 continue
 
+            # get_signal_summary needs prev candle (df.iloc[-2]); skip the
+            # very first sampled candle of each symbol.
+            if cursors[sym] < 2:
+                continue
+
             df = per_symbol[sym]
             row_ind = df.iloc[cursors[sym] - 1].to_dict()  # the candle we just consumed
             indicators = get_signal_summary(df.iloc[: cursors[sym]])
