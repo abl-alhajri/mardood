@@ -33,9 +33,9 @@ MEME_SYMBOLS = {
 }
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.55
+SIGNAL_CONFIDENCE_THRESHOLD = 0.65
 MAX_POSITION_SIZE_PCT       = 0.30
-SCAN_INTERVAL_MINUTES       = 2
+SCAN_INTERVAL_MINUTES       = 240   # 4 hours — once per 4h candle close
 
 # Shadow mode: log brain and heuristic decisions to shadow_decisions
 # but skip opening new paper-trading positions. Existing positions are
@@ -47,22 +47,20 @@ REPORT_TIME                 = "08:00"
 TIMEZONE                    = "Asia/Dubai"
 XYZTRADINGAE_PHASE          = 2
 
-# --- Scalping risk profile ----------------------------------------------
-# Default % stops/targets — used as a fallback when ATR isn't available.
-# Tight stops + 3:1 reward/risk for fast scalps (minutes to 2 hours hold).
-STOP_LOSS_PCT       = 0.005    # 0.5%
-TAKE_PROFIT_PCT     = 0.015    # 1.5%  (3 * SL)
+# --- Swing trading risk profile -----------------------------------------
+# Reverted from scalper to short-term swing on 4h candles. Stops are
+# fixed at 2% and targets at 8% (4:1 RR) per user spec — ATR-scaling
+# disabled by clamping MIN_SL == MAX_SL.
+STOP_LOSS_PCT       = 0.02     # 2%  (fallback when atr_pct is missing)
+TAKE_PROFIT_PCT     = 0.08     # 8%  (4 * SL — matches RR multiplier below)
 
-# ATR-based stops (preferred when atr_pct is on the signal). Distances
-# scale with realised volatility on 5-min candles but are bounded.
-# Bounds widened after backtest analysis: the prior 0.3% floor + 0.3%
-# friction collapsed effective RR from nominal 3:1 to 1:1, demanding
-# 50% win rate to break even (achieved 22.6%). New 1.0% floor + 0.3%
-# friction yields effective 2.07:1, ~32.5% break-even.
+# ATR-based stops: with MIN_SL == MAX_SL, the ATR computation always
+# clamps to exactly 2%. ATR_SL_MULTIPLIER becomes irrelevant in this
+# mode. Widen the bounds later if reverting to ATR-scaling.
 ATR_SL_MULTIPLIER   = 1.5
-ATR_RR_MULTIPLIER   = 3.0
-MIN_SL_PCT          = 0.010    # was 0.003 — 1.0% floor gives friction room
-MAX_SL_PCT          = 0.030    # was 0.015 — wider ceiling for high-vol regimes
+ATR_RR_MULTIPLIER   = 4.0      # 4:1 reward:risk
+MIN_SL_PCT          = 0.02     # flat 2% floor
+MAX_SL_PCT          = 0.02     # flat 2% ceiling (= MIN, ATR scaling off)
 
 # Volume-spike detection threshold (used by indicators)
 VOLUME_SPIKE_RATIO  = 2.0      # current candle volume / 20-candle avg

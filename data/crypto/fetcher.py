@@ -105,18 +105,39 @@ def get_coinbase_ohlcv(symbol: str, granularity: int = 300, limit: int = 300) ->
     return df[["open", "high", "low", "close", "volume"]]
 
 
-def get_crypto_ohlcv(symbol: str, days: int = 1) -> pd.DataFrame:
-    """
-    Hybrid OHLCV fetcher:
-      - Symbols in COINBASE_SYMBOLS -> Coinbase Exchange, 5-min candles, real volume
-      - Everything else             -> CoinGecko /ohlc, 30-min candles, zero volume
+def _resample_ohlcv(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Resample finer-granularity OHLCV to a coarser frequency (e.g. 1h -> 4h)."""
+    return df.resample(freq).agg({
+        "open":   "first",
+        "high":   "max",
+        "low":    "min",
+        "close":  "last",
+        "volume": "sum",
+    }).dropna()
 
-    `days` is only used for the CoinGecko fallback (1 -> ~48 30-min candles).
+
+def get_crypto_ohlcv(symbol: str, days: int = 30, granularity_seconds: int = 14400) -> pd.DataFrame:
+    """
+    Hybrid OHLCV fetcher producing 4-HOUR candles by default:
+      - Symbols in COINBASE_SYMBOLS -> Coinbase Exchange. Coinbase does NOT
+        support 4h natively (valid: 1m/5m/15m/1h/6h/1d), so we fetch 300
+        1-hour candles and resample to 4h, yielding ~75 4h candles
+        (12.5 days of history, real volume).
+      - Everything else             -> CoinGecko /ohlc with days=30 which
+        the free tier resolves to native 4-hour candles (~180 candles,
+        zero volume)
+
+    Both paths produce uniform 4h timeframe; the brain's two-regime rubric
+    is volume-availability only, not interval mismatch.
     """
     if symbol in COINBASE_SYMBOLS:
-        return get_coinbase_ohlcv(symbol)
+        if granularity_seconds == 14400:
+            # 4h not natively supported by Coinbase — fetch 1h then resample.
+            df_1h = get_coinbase_ohlcv(symbol, granularity=3600, limit=300)
+            return _resample_ohlcv(df_1h, "4h")
+        return get_coinbase_ohlcv(symbol, granularity=granularity_seconds, limit=300)
 
-    # CoinGecko fallback for symbols Coinbase doesn't carry (BNB, PEPE, WIF, BONK, FLOKI)
+    # CoinGecko fallback (BNB, PEPE, WIF, BONK, FLOKI). days=30 -> 4h candles.
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")
@@ -133,8 +154,8 @@ def get_crypto_ohlcv(symbol: str, days: int = 1) -> pd.DataFrame:
 
 
 def candle_interval_minutes(symbol: str) -> int:
-    """5 for Coinbase symbols, 30 for CoinGecko fallbacks. Used to tag the signal."""
-    return 5 if symbol in COINBASE_SYMBOLS else 30
+    """All routes (Coinbase + CoinGecko) now produce 4h candles. Returns 240."""
+    return 240
 
 
 def get_coinbase_prices(symbols: list[str]) -> dict:

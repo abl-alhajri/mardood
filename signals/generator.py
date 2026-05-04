@@ -24,14 +24,17 @@ console = Console()
 
 def _compute_btc_regime_now() -> bool:
     """
-    True if BTC's latest 1h close is above its 1h EMA200.
-    Fetched once per scan cycle, shared across all parallel workers via
-    the regime arg on scan_crypto.
+    True if BTC's latest 1h close is above its 1h EMA200 (~8-day trend).
+    Coinbase doesn't support 4h natively and resampling to 4h gives only
+    ~75 candles — not enough for EMA200 to converge. 1h candles give a
+    fully-converged EMA200 over 200 hours (~8 days), an appropriate
+    regime filter for 4-48 hour swing holds.
+    Fetched once per scan cycle, shared across all parallel workers.
     """
     try:
-        # 300 1-hour candles = 12.5 days, plenty for EMA200 to converge.
+        # 300 1-hour candles = 12.5 days, comfortably above 200 for EMA200 convergence.
         btc_1h = get_coinbase_ohlcv("BTCUSDT", granularity=3600, limit=300)
-        if len(btc_1h) < 50:
+        if len(btc_1h) < 200:
             return False
         ema200 = btc_1h["close"].ewm(span=200, adjust=False).mean()
         return bool(btc_1h["close"].iloc[-1] > ema200.iloc[-1])
@@ -46,7 +49,9 @@ def scan_crypto(symbol: str, btc_regime_bullish: bool = False):
     comparison. Return the brain's signal (production trading decision).
     """
     try:
-        df = get_crypto_ohlcv(symbol, days=1)
+        # 4-hour candles via the hybrid fetcher's defaults (Coinbase
+        # granularity=14400 / CoinGecko days=30).
+        df = get_crypto_ohlcv(symbol)
         df = add_all_indicators(df)
         indicators = get_signal_summary(df)
         indicators["interval_minutes"] = candle_interval_minutes(symbol)
