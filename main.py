@@ -61,6 +61,11 @@ def run_scan():
     signals = run_full_scan()
 
     if signals:
+        # Strongest signals win the slots when MAX_CONCURRENT_POSITIONS is hit.
+        # Without this, ThreadPoolExecutor.as_completed() arrival order decided
+        # which 5 signals filled — last live scan filled with 67% sigs while
+        # 72%/68% sigs got "skipped: max concurrent".
+        signals.sort(key=lambda s: s.get("confidence", 0), reverse=True)
         console.print(f"\n[green]✓ {len(signals)} signal(s) above threshold[/green]")
         log_signals(signals)
         send_signals(signals)
@@ -88,8 +93,15 @@ def run_scan():
                 elif action == "SKIPPED":
                     console.print(f"  [dim]· skipped {sym}: {result['reason']}[/dim]")
 
-            perf = get_performance_summary()
-            console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
+            # Always print the per-scan portfolio summary, even if every
+            # signal was SKIPPED (a previous scan was reported missing the
+            # line; wrap defensively so the next missing line carries
+            # diagnostic info instead of going silent).
+            try:
+                perf = get_performance_summary()
+                console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
+            except Exception as e:
+                console.print(f"\n[red]Portfolio summary unavailable: {e}[/red]")
         elif SHADOW_MODE:
             console.print("\n[yellow]🔭 SHADOW_MODE active — decisions logged to shadow_decisions, no new trades opened[/yellow]")
     else:
