@@ -10,6 +10,7 @@ from config import CRYPTO_WATCHLIST
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 SYMBOL_TO_ID = {
+    # Original watchlist
     "BTCUSDT":   "bitcoin",
     "ETHUSDT":   "ethereum",
     "SOLUSDT":   "solana",
@@ -21,6 +22,20 @@ SYMBOL_TO_ID = {
     "WIFUSDT":   "dogwifcoin",
     "BONKUSDT":  "bonk",
     "FLOKIUSDT": "floki",
+    # Layer-1s and layer-2s added 2026-05
+    "AVAXUSDT":  "avalanche-2",
+    "LINKUSDT":  "chainlink",
+    "DOTUSDT":   "polkadot",
+    "ADAUSDT":   "cardano",
+    "TRXUSDT":   "tron",
+    "ARBUSDT":   "arbitrum",
+    "OPUSDT":    "optimism",
+    "UNIUSDT":   "uniswap",
+    "SUIUSDT":   "sui",
+    "TONUSDT":   "the-open-network",
+    # POL = rebranded MATIC. CoinGecko slug "matic-network" is deprecated
+    # (returns empty); the live slug is "polygon-ecosystem-token".
+    "POLUSDT":   "polygon-ecosystem-token",
 }
 
 _CG_MAX_RETRIES = 5
@@ -67,9 +82,23 @@ COINBASE_SYMBOLS = {
     "BTCUSDT":  "BTC-USD",
     "SOLUSDT":  "SOL-USD",
     "XRPUSDT":  "XRP-USD",
-    # DOGE/SHIB removed in scalper mode — 0.6% round-trip friction
-    # made scalp RR negative even on winners. See backtest analysis.
-    # ETH removed — persistent underperformer (11% win rate in v3.1).
+    # Layer-1s and layer-2s added 2026-05 (probed live against
+    # api.exchange.coinbase.com/products/<X>/stats and confirmed listed)
+    "AVAXUSDT": "AVAX-USD",
+    "LINKUSDT": "LINK-USD",
+    "DOTUSDT":  "DOT-USD",
+    "ADAUSDT":  "ADA-USD",
+    "ARBUSDT":  "ARB-USD",
+    "OPUSDT":   "OP-USD",
+    "UNIUSDT":  "UNI-USD",
+    "SUIUSDT":  "SUI-USD",
+    "TONUSDT":  "TON-USD",
+    "POLUSDT":  "POL-USD",   # rebranded from MATIC
+    # NOT on Coinbase (route to CoinGecko fallback):
+    #   BNBUSDT  — Binance-issued, never listed on Coinbase US
+    #   TRXUSDT  — SEC enforcement against Tron
+    #   PEPE/WIF/BONK/FLOKI memes  — kept on CoinGecko regardless
+    # DOGE/SHIB/ETH excluded from CRYPTO_WATCHLIST entirely.
 }
 
 

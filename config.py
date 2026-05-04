@@ -15,15 +15,21 @@ FINNHUB_API_KEY     = os.getenv("FINNHUB_API_KEY")
 # ANTHROPIC_API_KEY is read directly via os.getenv in analysis/brain.py
 
 CRYPTO_WATCHLIST = [
-    "BTCUSDT", "SOLUSDT",
-    "BNBUSDT", "XRPUSDT",
-    # DOGE and SHIB removed: 90-day backtest showed combined $-661 loss
-    # from 50 trades. Their 0.6% round-trip friction makes scalp RR negative
-    # even on winners. Skipping them in scalper mode entirely.
-    # ETH removed: persistent underperformer across v1/v2/v3 backtests
-    # (6.7% / 21.4% / 0% / 11.1% win rates over 90 days). Likely the
-    # heuristic doesn't fit ETH's regime during the test window.
-    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT"
+    # Majors on Coinbase (real volume, 4h candles via 1h->4h resample)
+    "BTCUSDT", "SOLUSDT", "XRPUSDT",
+    "AVAXUSDT", "LINKUSDT", "DOTUSDT", "ADAUSDT",
+    "ARBUSDT", "OPUSDT", "UNIUSDT", "SUIUSDT", "TONUSDT",
+    # POL = the rebranded MATIC. Coinbase delisted MATIC-USD when Polygon
+    # migrated tokens; POL-USD is the live successor.
+    "POLUSDT",
+    # CoinGecko fallback (Coinbase doesn't list these)
+    "BNBUSDT",
+    # TRX: Coinbase US doesn't list it (SEC enforcement on Tron). Routed
+    # to CoinGecko fallback, accepts 30-day 4h candles with zero volume.
+    "TRXUSDT",
+    # Memes (CoinGecko fallback — 4h candles, zero volume)
+    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
+    # NOTE: ETH and DOGE/SHIB intentionally excluded — see backtest analysis.
 ]
 
 # Meme coins are treated as one bucket for concurrent-position caps —
