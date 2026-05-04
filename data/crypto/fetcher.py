@@ -10,24 +10,14 @@ from config import CRYPTO_WATCHLIST
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 SYMBOL_TO_ID = {
-    # Original watchlist
+    # Coinbase-routed majors (also need CoinGecko slugs for prices/news)
     "BTCUSDT":   "bitcoin",
-    "ETHUSDT":   "ethereum",
     "SOLUSDT":   "solana",
-    "BNBUSDT":   "binancecoin",
     "XRPUSDT":   "ripple",
-    "DOGEUSDT":  "dogecoin",
-    "SHIBUSDT":  "shiba-inu",
-    "PEPEUSDT":  "pepe",
-    "WIFUSDT":   "dogwifcoin",
-    "BONKUSDT":  "bonk",
-    "FLOKIUSDT": "floki",
-    # Layer-1s and layer-2s added 2026-05
     "AVAXUSDT":  "avalanche-2",
     "LINKUSDT":  "chainlink",
     "DOTUSDT":   "polkadot",
     "ADAUSDT":   "cardano",
-    "TRXUSDT":   "tron",
     "ARBUSDT":   "arbitrum",
     "OPUSDT":    "optimism",
     "UNIUSDT":   "uniswap",
@@ -36,6 +26,9 @@ SYMBOL_TO_ID = {
     # POL = rebranded MATIC. CoinGecko slug "matic-network" is deprecated
     # (returns empty); the live slug is "polygon-ecosystem-token".
     "POLUSDT":   "polygon-ecosystem-token",
+    # CoinGecko-fallback (no Coinbase listing)
+    "BNBUSDT":   "binancecoin",
+    "TRXUSDT":   "tron",
 }
 
 _CG_MAX_RETRIES = 5
@@ -97,8 +90,8 @@ COINBASE_SYMBOLS = {
     # NOT on Coinbase (route to CoinGecko fallback):
     #   BNBUSDT  — Binance-issued, never listed on Coinbase US
     #   TRXUSDT  — SEC enforcement against Tron
-    #   PEPE/WIF/BONK/FLOKI memes  — kept on CoinGecko regardless
-    # DOGE/SHIB/ETH excluded from CRYPTO_WATCHLIST entirely.
+    # ETH/DOGE/SHIB and all memes (PEPE/WIF/BONK/FLOKI) are excluded
+    # from CRYPTO_WATCHLIST entirely.
 }
 
 
@@ -166,7 +159,7 @@ def get_crypto_ohlcv(symbol: str, days: int = 30, granularity_seconds: int = 144
             return _resample_ohlcv(df_1h, "4h")
         return get_coinbase_ohlcv(symbol, granularity=granularity_seconds, limit=300)
 
-    # CoinGecko fallback (BNB, PEPE, WIF, BONK, FLOKI). days=30 -> 4h candles.
+    # CoinGecko fallback (BNB, TRX). days=30 -> 4h candles.
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")

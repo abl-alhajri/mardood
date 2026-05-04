@@ -27,16 +27,10 @@ CRYPTO_WATCHLIST = [
     # TRX: Coinbase US doesn't list it (SEC enforcement on Tron). Routed
     # to CoinGecko fallback, accepts 30-day 4h candles with zero volume.
     "TRXUSDT",
-    # Memes (CoinGecko fallback — 4h candles, zero volume)
-    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
-    # NOTE: ETH and DOGE/SHIB intentionally excluded — see backtest analysis.
+    # NOTE: memes (PEPE/WIF/BONK/FLOKI) and ETH/DOGE/SHIB intentionally
+    # excluded. CoinGecko 429s broke 3/4 memes per scan; 0.2% slippage
+    # tier inverted RR on winners; 80%+ BTC correlation = no diversification.
 ]
-
-# Meme coins are treated as one bucket for concurrent-position caps —
-# they're correlated and should not consume more than one risk slot.
-MEME_SYMBOLS = {
-    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
-}
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
 SIGNAL_CONFIDENCE_THRESHOLD = 0.65
@@ -71,18 +65,17 @@ MAX_SL_PCT          = 0.02     # flat 2% ceiling (= MIN, ATR scaling off)
 # Volume-spike detection threshold (used by indicators)
 VOLUME_SPIKE_RATIO  = 2.0      # current candle volume / 20-candle avg
 
-# Concurrent-position caps
+# Concurrent-position cap
 MAX_CONCURRENT_POSITIONS = 5
-MAX_MEME_POSITIONS       = 1   # all meme coins share one effective slot
 
 # Daily drawdown circuit breaker — halt new entries if down this much
 # from the day's starting equity (UTC day boundaries).
 DAILY_DRAWDOWN_HALT_PCT = 0.05
 
 # Execution friction — applied per side on every paper trade.
-FEE_PCT_PER_SIDE     = 0.001    # 0.1% (Binance taker)
-SLIPPAGE_PCT_MAJOR   = 0.0005   # 0.05% per side for liquid majors
-SLIPPAGE_PCT_MEME    = 0.002    # 0.2% per side for meme coins
+# Single tier now that memes are gone; was MAJOR/MEME split.
+FEE_PCT_PER_SIDE  = 0.001    # 0.1% (Coinbase taker)
+SLIPPAGE_PCT      = 0.0005   # 0.05% per side for liquid majors
 
 BASE_DIR    = pathlib.Path(__file__).parent
 MEMORY_DB   = BASE_DIR / "memory" / "xyztradingae.db"

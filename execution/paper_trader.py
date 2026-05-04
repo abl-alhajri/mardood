@@ -12,10 +12,16 @@ from config import (
     MAX_POSITION_SIZE_PCT,
     STOP_LOSS_PCT, TAKE_PROFIT_PCT,
     ATR_SL_MULTIPLIER, ATR_RR_MULTIPLIER, MIN_SL_PCT, MAX_SL_PCT,
-    MAX_CONCURRENT_POSITIONS, MAX_MEME_POSITIONS, MEME_SYMBOLS,
+    MAX_CONCURRENT_POSITIONS,
     DAILY_DRAWDOWN_HALT_PCT,
-    FEE_PCT_PER_SIDE, SLIPPAGE_PCT_MAJOR, SLIPPAGE_PCT_MEME,
+    FEE_PCT_PER_SIDE, SLIPPAGE_PCT,
 )
+
+# Legacy meme symbols — used only by _cleanup_meme_positions() to refund
+# any historical open positions when memes were dropped from the watchlist.
+_LEGACY_MEME_SYMBOLS = {
+    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
+}
 
 MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
 
@@ -33,7 +39,8 @@ def _today_utc() -> str:
 
 
 def _slippage_for(symbol: str) -> float:
-    return SLIPPAGE_PCT_MEME if symbol in MEME_SYMBOLS else SLIPPAGE_PCT_MAJOR
+    """Single-tier slippage now that memes are gone."""
+    return SLIPPAGE_PCT
 
 
 def _friction_per_side(symbol: str) -> float:
@@ -114,6 +121,44 @@ def init_paper_trading():
         conn.commit()
 
     _cleanup_stale_stock_positions()
+    _cleanup_meme_positions()
+
+
+def _cleanup_meme_positions():
+    """
+    One-shot: refund any open meme positions left over from before
+    PEPE/WIF/BONK/FLOKI (and earlier DOGE/SHIB) were dropped from the
+    watchlist. Mirrors _cleanup_stale_stock_positions logic — close at
+    entry price (zero P&L) and refund cash. Idempotent: subsequent runs
+    find no matching rows.
+    """
+    placeholders = ",".join("?" * len(_LEGACY_MEME_SYMBOLS))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, symbol, quantity, entry_price, entry_time "
+            f"FROM positions WHERE status='OPEN' AND symbol IN ({placeholders})",
+            tuple(_LEGACY_MEME_SYMBOLS),
+        ).fetchall()
+        if not rows:
+            return
+        now = _now()
+        refunded = 0.0
+        for pid, sym, qty, entry, etime in rows:
+            cost = qty * entry
+            refunded += cost
+            conn.execute("UPDATE positions SET status='CLOSED' WHERE id=?", (pid,))
+            conn.execute("""
+                INSERT INTO trade_history
+                    (symbol, side, entry_price, exit_price, quantity, pnl, pnl_pct,
+                     entry_time, exit_time, exit_reason)
+                VALUES (?, 'BUY', ?, ?, ?, 0.0, 0.0, ?, ?, 'Memes deprecated - refunded')
+            """, (sym, entry, entry, qty, etime, now))
+        conn.execute(
+            "UPDATE portfolio SET cash=cash+?, updated_at=? WHERE id=1",
+            (refunded, now),
+        )
+        conn.commit()
+        print(f"[paper_trader] Refunded ${refunded:.2f} from {len(rows)} meme position(s)")
 
 
 def _cleanup_stale_stock_positions():
@@ -240,7 +285,6 @@ def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
     cash = portfolio["cash"]
     open_positions = {p["symbol"]: p for p in portfolio["positions"]}
     open_count = len(open_positions)
-    meme_count = sum(1 for s in open_positions if s in MEME_SYMBOLS)
 
     # SELL signals are now ignored — backtest showed they were closing
     # winners early and locking in losses (12 SELL exits, 0% win rate).
@@ -255,10 +299,6 @@ def execute_paper_trade(signal: dict, current_price: float) -> dict | None:
     if open_count >= MAX_CONCURRENT_POSITIONS:
         return {"action": "SKIPPED", "symbol": symbol,
                 "reason": f"max concurrent positions ({MAX_CONCURRENT_POSITIONS})"}
-
-    if symbol in MEME_SYMBOLS and meme_count >= MAX_MEME_POSITIONS:
-        return {"action": "SKIPPED", "symbol": symbol,
-                "reason": f"meme bucket full ({MAX_MEME_POSITIONS} open)"}
 
     with get_conn() as conn:
         _refresh_daily_baseline(conn)

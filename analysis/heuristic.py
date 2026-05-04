@@ -35,8 +35,8 @@ def heuristic_decision(indicators: dict, btc_regime_bullish: bool = True) -> dic
 
     bullish_stack = above_ema20 and above_ema50 and above_ema200
 
-    # MACD histogram normalized to price scale — works across BTC's
-    # dollar-scale and SHIB's microscopic histogram values.
+    # MACD histogram normalized to price scale — works for assets across
+    # the price spectrum (BTC dollar-scale histogram vs. small-cap fractions).
     macd_hist_pct = (macd_hist / price) if price > 0 else 0.0
     macd_meaningful = macd_hist_pct > 0.0005
 

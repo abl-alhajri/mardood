@@ -1,10 +1,10 @@
 """
 In-memory paper-trading simulator.
 
-Mirrors execution.paper_trader's risk model — concurrent caps, meme bucket,
-ATR-based stops with bounds, fees + slippage on both sides, daily drawdown
-halt — but writes nothing to disk. State lives in lists/dicts on the
-simulator instance.
+Mirrors execution.paper_trader's risk model — concurrent cap, ATR-based
+stops with bounds, fees + slippage on both sides, daily drawdown halt —
+but writes nothing to disk. State lives in lists/dicts on the simulator
+instance.
 
 Intra-candle SL/TP triggers use the candle's high/low (matches the
 production wick-check fix).
@@ -20,9 +20,9 @@ import pandas as pd
 from config import (
     MAX_POSITION_SIZE_PCT, STOP_LOSS_PCT, TAKE_PROFIT_PCT,
     ATR_SL_MULTIPLIER, ATR_RR_MULTIPLIER, MIN_SL_PCT, MAX_SL_PCT,
-    MAX_CONCURRENT_POSITIONS, MAX_MEME_POSITIONS, MEME_SYMBOLS,
+    MAX_CONCURRENT_POSITIONS,
     DAILY_DRAWDOWN_HALT_PCT,
-    FEE_PCT_PER_SIDE, SLIPPAGE_PCT_MAJOR, SLIPPAGE_PCT_MEME,
+    FEE_PCT_PER_SIDE, SLIPPAGE_PCT,
 )
 
 
@@ -75,7 +75,6 @@ class Simulator:
     # Tracking
     rejected_for_dd: int = 0
     rejected_for_concurrent_cap: int = 0
-    rejected_for_meme_cap: int = 0
     rejected_for_already_long: int = 0
     rejected_for_cooldown: int = 0
 
@@ -86,7 +85,8 @@ class Simulator:
     # ───── helpers ─────────────────────────────────────────────────────
 
     def _slippage(self, symbol: str) -> float:
-        return SLIPPAGE_PCT_MEME if symbol in MEME_SYMBOLS else SLIPPAGE_PCT_MAJOR
+        # Single-tier slippage now that memes are gone.
+        return SLIPPAGE_PCT
 
     def _friction(self, symbol: str) -> float:
         fee = self.fee_pct_per_side if self.fee_pct_per_side is not None else FEE_PCT_PER_SIDE
@@ -170,13 +170,6 @@ class Simulator:
             self.rejected_for_concurrent_cap += 1
             self.skip_log.append((ts, symbol, f"max concurrent ({MAX_CONCURRENT_POSITIONS})"))
             return "SKIPPED:max_concurrent"
-
-        if symbol in MEME_SYMBOLS:
-            meme_count = sum(1 for s in self.open_positions if s in MEME_SYMBOLS)
-            if meme_count >= MAX_MEME_POSITIONS:
-                self.rejected_for_meme_cap += 1
-                self.skip_log.append((ts, symbol, "meme bucket full"))
-                return "SKIPPED:meme_cap"
 
         self._refresh_daily_baseline(ts)
         if self._drawdown_pct() >= DAILY_DRAWDOWN_HALT_PCT:

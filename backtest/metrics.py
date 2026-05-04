@@ -132,7 +132,6 @@ def compute_metrics(sim: Simulator) -> dict:
             "already_long":   sim.rejected_for_already_long,
             "cooldown":       sim.rejected_for_cooldown,
             "max_concurrent": sim.rejected_for_concurrent_cap,
-            "meme_cap":       sim.rejected_for_meme_cap,
             "dd_halt":        sim.rejected_for_dd,
         },
     }
