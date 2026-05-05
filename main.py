@@ -7,7 +7,10 @@ import time
 from rich.console import Console
 from rich.panel import Panel
 
-from config import SCAN_INTERVAL_MINUTES, TIMEZONE, XYZTRADINGAE_PHASE, SHADOW_MODE
+from config import (
+    SCAN_INTERVAL_MINUTES, TIMEZONE, XYZTRADINGAE_PHASE, SHADOW_MODE,
+    MAX_CONCURRENT_POSITIONS,
+)
 from signals.generator import run_full_scan
 from alerts.notifier import send_signals, send_telegram
 from memory.trade_log import log_signals
@@ -18,6 +21,7 @@ from execution.paper_trader import (
     get_portfolio,
 )
 from data.crypto.fetcher import get_live_price
+from analysis.correlation import get_correlation_matrix, correlation
 
 console = Console()
 
@@ -66,6 +70,68 @@ def run_scan():
         # which 5 signals filled — last live scan filled with 67% sigs while
         # 72%/68% sigs got "skipped: max concurrent".
         signals.sort(key=lambda s: s.get("confidence", 0), reverse=True)
+
+        # Greedy diversification: each subsequent slot picks the signal that
+        # maximizes confidence x (1 - max correlation with already-picked
+        # positions). Without this, a scan that sees BTC/SOL/AVAX/XRP/LINK
+        # all signal BUY produces 5x effective BTC exposure.
+        portfolio = get_portfolio()
+        already_open = {p["symbol"] for p in portfolio["positions"]}
+        free_slots = max(0, MAX_CONCURRENT_POSITIONS - len(already_open))
+
+        if free_slots > 0 and len(signals) > free_slots:
+            corr_data = get_correlation_matrix()
+            matrix = corr_data["matrix"]
+
+            picked_syms = set(already_open)  # existing positions are anchors
+            remaining = list(signals)
+            ordered: list = []
+
+            # First pick: highest confidence (already at index 0 after sort).
+            first = max(remaining, key=lambda s: s.get("confidence", 0))
+            ordered.append(first)
+            picked_syms.add(first["symbol"])
+            remaining.remove(first)
+
+            # Subsequent picks: maximize confidence x diversification. The
+            # 60/40 split (diversification/confidence) gives diversification
+            # more discrimination at the typical 65-68% confidence cluster
+            # the brain produces. Tunable.
+            def score(sig):
+                conf = sig.get("confidence", 0)
+                if not picked_syms:
+                    return conf
+                max_corr = max(correlation(sig["symbol"], s, matrix) for s in picked_syms)
+                div_bonus = 1.0 - max(0.0, max_corr)
+                return conf * (0.4 + 0.6 * div_bonus)
+
+            # +5 buffer so the loop sorts ALL plausibly-fillable signals
+            # into priority order, not just the slot count.
+            while remaining and len(ordered) < free_slots + 5:
+                best = max(remaining, key=score)
+                ordered.append(best)
+                picked_syms.add(best["symbol"])
+                remaining.remove(best)
+
+            # Anything left (shouldn't happen with the +5 buffer) goes at the
+            # end in arrival order — defensive.
+            ordered.extend(remaining)
+            signals = ordered
+
+            # Audit log: show each slot's max-correlation against the prior
+            # set (already-open + earlier picks in this scan).
+            for i, s in enumerate(signals[:free_slots], 1):
+                prior = (already_open | {x["symbol"] for x in signals[:i - 1]}) - {s["symbol"]}
+                if prior:
+                    max_corr_anchor = f"{max(correlation(s['symbol'], p, matrix) for p in prior):.2f}"
+                else:
+                    max_corr_anchor = "—"
+                console.print(
+                    f"  [dim]slot {i}: {s['symbol']} "
+                    f"conf {s.get('confidence', 0):.0%} "
+                    f"max-corr-with-portfolio {max_corr_anchor}[/dim]"
+                )
+
         console.print(f"\n[green]✓ {len(signals)} signal(s) above threshold[/green]")
         log_signals(signals)
         send_signals(signals)
@@ -102,6 +168,24 @@ def run_scan():
                 console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
             except Exception as e:
                 console.print(f"\n[red]Portfolio summary unavailable: {e}[/red]")
+
+            # Effective BTC exposure: sum of positive BTC correlations across
+            # currently-open positions. >3.5x on a 5-position portfolio is
+            # concentration risk worth flagging.
+            try:
+                open_now = {p["symbol"]: p for p in get_portfolio()["positions"]}
+                if open_now:
+                    corr_data = get_correlation_matrix()
+                    matrix = corr_data["matrix"]
+                    btc_corrs = [correlation(s, "BTCUSDT", matrix) for s in open_now]
+                    effective_btc_beta = sum(max(0.0, c) for c in btc_corrs)
+                    avg_corr = sum(btc_corrs) / len(btc_corrs)
+                    console.print(
+                        f"[dim]Effective BTC exposure: {effective_btc_beta:.1f}x "
+                        f"({len(open_now)} positions, avg correlation {avg_corr:.2f})[/dim]"
+                    )
+            except Exception as e:
+                console.print(f"[red]BTC exposure metric unavailable: {e}[/red]")
         elif SHADOW_MODE:
             console.print("\n[yellow]🔭 SHADOW_MODE active — decisions logged to shadow_decisions, no new trades opened[/yellow]")
     else:
