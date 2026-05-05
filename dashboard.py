@@ -39,6 +39,7 @@ DEFAULT_PAYLOAD = {
     "total_pnl": 0,
     "open_pnl": 0,
     "closed_pnl": 0,
+    "open_position_value": 0,
     "win_rate": 0,
     "portfolio_value": 10000,
     "prices": {},
@@ -177,6 +178,10 @@ def get_db_data():
             } for t in trades]
 
             open_pnl = sum(p["pnl"] for p in pos_list)
+            # Mark-to-market: current value of open positions, not just unrealized P&L.
+            # This is what the open positions are worth right now if liquidated at mid
+            # price (no exit-side friction applied here — that's tracked separately).
+            open_position_value = sum(p["quantity"] * p["current_price"] for p in pos_list)
             closed_pnl = sum(t["pnl"] for t in trade_list) if trade_list else 0
             total_pnl = round(open_pnl + closed_pnl, 2)
             win_rate = (
@@ -194,8 +199,9 @@ def get_db_data():
                 "total_pnl": total_pnl,
                 "open_pnl": round(open_pnl, 2),
                 "closed_pnl": round(closed_pnl, 2),
+                "open_position_value": round(open_position_value, 2),
                 "win_rate": win_rate,
-                "portfolio_value": round(portfolio["cash"] + open_pnl, 2),
+                "portfolio_value": round(portfolio["cash"] + open_position_value, 2),
                 "prices": prices,
                 "error": None,
             }
