@@ -70,7 +70,12 @@ def fetch_live_prices():
     """
     Hybrid price refresh driven by CRYPTO_WATCHLIST:
       - Coinbase /products/{X-USD}/stats for symbols in COINBASE_SYMBOLS (always fresh, parallel)
-      - CoinGecko /simple/price for the rest (5-min TTL cache)
+      - CoinGecko /simple/price for any remainder (5-min TTL cache).
+
+    With the current watchlist (all Coinbase), the CoinGecko branch is
+    expected to be a no-op. The defensive log below fires only if a
+    future watchlist edit reintroduces a non-Coinbase symbol — useful
+    early warning that we're back to consuming CoinGecko quota here.
     """
     coinbase_syms  = [s for s in CRYPTO_WATCHLIST if s in COINBASE_SYMBOLS]
     coingecko_syms = [s for s in CRYPTO_WATCHLIST if s not in COINBASE_SYMBOLS]
@@ -83,6 +88,11 @@ def fetch_live_prices():
             print(f"[dashboard] Coinbase price fetch failed: {e}", flush=True)
 
     if coingecko_syms:
+        print(
+            f"[dashboard] WARNING: routing {coingecko_syms} through CoinGecko — "
+            "watchlist now contains non-Coinbase symbols.",
+            flush=True,
+        )
         prices.update(_fetch_coingecko_prices_cached(coingecko_syms))
 
     if prices:

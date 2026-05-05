@@ -10,7 +10,12 @@ from config import CRYPTO_WATCHLIST
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 SYMBOL_TO_ID = {
-    # Coinbase-routed majors (also need CoinGecko slugs for prices/news)
+    # CoinGecko slugs for the watchlist — used by news/sentiment helpers
+    # (community votes, trending list) even though OHLCV and live prices
+    # all flow through Coinbase. Every entry below also has a Coinbase
+    # listing in COINBASE_SYMBOLS, so the CoinGecko OHLC/price fallback
+    # in get_crypto_ohlcv / get_crypto_price is dead code today — kept
+    # for emergency use if a symbol is delisted from Coinbase.
     "BTCUSDT":   "bitcoin",
     "SOLUSDT":   "solana",
     "XRPUSDT":   "ripple",
@@ -26,9 +31,6 @@ SYMBOL_TO_ID = {
     # POL = rebranded MATIC. CoinGecko slug "matic-network" is deprecated
     # (returns empty); the live slug is "polygon-ecosystem-token".
     "POLUSDT":   "polygon-ecosystem-token",
-    # CoinGecko-fallback (no Coinbase listing)
-    "BNBUSDT":   "binancecoin",
-    "TRXUSDT":   "tron",
 }
 
 _CG_MAX_RETRIES = 5
@@ -87,11 +89,12 @@ COINBASE_SYMBOLS = {
     "SUIUSDT":  "SUI-USD",
     "TONUSDT":  "TON-USD",
     "POLUSDT":  "POL-USD",   # rebranded from MATIC
-    # NOT on Coinbase (route to CoinGecko fallback):
-    #   BNBUSDT  — Binance-issued, never listed on Coinbase US
-    #   TRXUSDT  — SEC enforcement against Tron
-    # ETH/DOGE/SHIB and all memes (PEPE/WIF/BONK/FLOKI) are excluded
-    # from CRYPTO_WATCHLIST entirely.
+    # All current CRYPTO_WATCHLIST symbols are on Coinbase. The CoinGecko
+    # OHLC/price fallback in get_crypto_ohlcv / get_crypto_price is now
+    # dead code on the production path — retained as an emergency
+    # fallback if a symbol is delisted, not exercised on any scan.
+    # Excluded from the watchlist (see config.py): BNB/TRX (CoinGecko
+    # rate-limit pressure on Railway), ETH/DOGE/SHIB, all memes.
 }
 
 
@@ -140,17 +143,16 @@ def _resample_ohlcv(df: pd.DataFrame, freq: str) -> pd.DataFrame:
 
 def get_crypto_ohlcv(symbol: str, days: int = 30, granularity_seconds: int = 14400) -> pd.DataFrame:
     """
-    Hybrid OHLCV fetcher producing 4-HOUR candles by default:
-      - Symbols in COINBASE_SYMBOLS -> Coinbase Exchange. Coinbase does NOT
-        support 4h natively (valid: 1m/5m/15m/1h/6h/1d), so we fetch 300
-        1-hour candles and resample to 4h, yielding ~75 4h candles
-        (12.5 days of history, real volume).
-      - Everything else             -> CoinGecko /ohlc with days=30 which
-        the free tier resolves to native 4-hour candles (~180 candles,
-        zero volume)
+    OHLCV fetcher producing 4-HOUR candles by default. Coinbase is the
+    only path exercised on production scans today — every CRYPTO_WATCHLIST
+    symbol is in COINBASE_SYMBOLS. Coinbase does NOT support 4h natively
+    (valid: 1m/5m/15m/1h/6h/1d), so we fetch 300 1-hour candles and
+    resample to 4h, yielding ~75 4h candles (~12.5 days of history,
+    real volume).
 
-    Both paths produce uniform 4h timeframe; the brain's two-regime rubric
-    is volume-availability only, not interval mismatch.
+    The CoinGecko branch is retained as an emergency fallback for any
+    symbol absent from COINBASE_SYMBOLS — it resolves to native 4-hour
+    candles with zero volume. Not used by the live watchlist.
     """
     if symbol in COINBASE_SYMBOLS:
         if granularity_seconds == 14400:
@@ -159,7 +161,7 @@ def get_crypto_ohlcv(symbol: str, days: int = 30, granularity_seconds: int = 144
             return _resample_ohlcv(df_1h, "4h")
         return get_coinbase_ohlcv(symbol, granularity=granularity_seconds, limit=300)
 
-    # CoinGecko fallback (BNB, TRX). days=30 -> 4h candles.
+    # CoinGecko fallback — emergency only; no live watchlist symbol routes here.
     coin_id = SYMBOL_TO_ID.get(symbol)
     if not coin_id:
         raise ValueError(f"Unknown symbol: {symbol}")
@@ -284,10 +286,10 @@ def get_recent_high_low(symbol: str, lookback_minutes: int = 5) -> tuple[float, 
 def get_live_price(symbol: str) -> float:
     """
     Live USD price for a single symbol. Routes through the SAME source
-    as get_crypto_ohlcv: Coinbase ticker for the 6 majors, CoinGecko
-    fallback for everything else. Keeps the brain, paper trader, and
-    dashboard reasoning on prices from the same exchange so SL/TP
-    triggers don't fire on cross-source price drift.
+    as get_crypto_ohlcv: Coinbase ticker for any symbol in COINBASE_SYMBOLS
+    (every current watchlist entry), CoinGecko fallback otherwise.
+    Keeps the brain, paper trader, and dashboard reasoning on prices from
+    the same exchange so SL/TP triggers don't fire on cross-source drift.
     """
     if symbol in COINBASE_SYMBOLS:
         product_id = COINBASE_SYMBOLS[symbol]

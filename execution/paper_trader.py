@@ -2,8 +2,8 @@
 XYZTradingAE — Paper Trading Engine
 
 Simulates real trades with virtual $10,000.
-Models taker fees + per-symbol slippage, ATR-sized stops, concurrent
-position caps (meme coins as one bucket), and a daily drawdown halt.
+Models taker fees + slippage, ATR-sized stops, concurrent position cap,
+and a daily drawdown halt.
 """
 import pathlib
 import sqlite3
@@ -18,10 +18,13 @@ from config import (
     FEE_PCT_PER_SIDE, SLIPPAGE_PCT,
 )
 
-# Legacy meme symbols — used only by _cleanup_meme_positions() to refund
-# any historical open positions when memes were dropped from the watchlist.
-_LEGACY_MEME_SYMBOLS = {
-    "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",
+# Symbols dropped from CRYPTO_WATCHLIST over time. _cleanup_dropped_positions()
+# refunds any open positions in these on the next deploy so they don't sit
+# orphaned (no SL/TP polling, no live price feed) after a watchlist trim.
+_LEGACY_DROPPED_SYMBOLS = {
+    "DOGEUSDT", "SHIBUSDT", "ETHUSDT",                # already-dropped majors
+    "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT",   # memes (c65628c)
+    "BNBUSDT", "TRXUSDT",                             # CoinGecko-only, dropped now
 }
 
 MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
@@ -133,23 +136,22 @@ def init_paper_trading():
         conn.commit()
 
     _cleanup_stale_stock_positions()
-    _cleanup_meme_positions()
+    _cleanup_dropped_positions()
 
 
-def _cleanup_meme_positions():
+def _cleanup_dropped_positions():
     """
-    One-shot: refund any open meme positions left over from before
-    PEPE/WIF/BONK/FLOKI (and earlier DOGE/SHIB) were dropped from the
-    watchlist. Mirrors _cleanup_stale_stock_positions logic — close at
-    entry price (zero P&L) and refund cash. Idempotent: subsequent runs
-    find no matching rows.
+    One-shot: refund any open positions in symbols that have been removed
+    from CRYPTO_WATCHLIST (memes, ETH, BNB, TRX, etc.). Mirrors
+    _cleanup_stale_stock_positions logic — close at entry price (zero P&L)
+    and refund cash. Idempotent: subsequent runs find no matching rows.
     """
-    placeholders = ",".join("?" * len(_LEGACY_MEME_SYMBOLS))
+    placeholders = ",".join("?" * len(_LEGACY_DROPPED_SYMBOLS))
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT id, symbol, quantity, entry_price, entry_time "
             f"FROM positions WHERE status='OPEN' AND symbol IN ({placeholders})",
-            tuple(_LEGACY_MEME_SYMBOLS),
+            tuple(_LEGACY_DROPPED_SYMBOLS),
         ).fetchall()
         if not rows:
             return
@@ -163,14 +165,14 @@ def _cleanup_meme_positions():
                 INSERT INTO trade_history
                     (symbol, side, entry_price, exit_price, quantity, pnl, pnl_pct,
                      entry_time, exit_time, exit_reason)
-                VALUES (?, 'BUY', ?, ?, ?, 0.0, 0.0, ?, ?, 'Memes deprecated - refunded')
+                VALUES (?, 'BUY', ?, ?, ?, 0.0, 0.0, ?, ?, 'Symbol dropped from watchlist - refunded')
             """, (sym, entry, entry, qty, etime, now))
         conn.execute(
             "UPDATE portfolio SET cash=cash+?, updated_at=? WHERE id=1",
             (refunded, now),
         )
         conn.commit()
-        print(f"[paper_trader] Refunded ${refunded:.2f} from {len(rows)} meme position(s)")
+        print(f"[paper_trader] Refunded ${refunded:.2f} from {len(rows)} legacy/dropped position(s)", flush=True)
 
 
 def _cleanup_stale_stock_positions():
@@ -413,10 +415,10 @@ def check_stop_loss_take_profit(current_prices: dict) -> list:
     """
     Check all open positions for SL/TP exits.
 
-    For Coinbase symbols, fetches the last 5 minutes of 1-min candles and
-    checks high/low wicks — catches intra-candle SL/TP touches that the
-    2-min spot sample would miss. Falls back to spot-price comparison for
-    CoinGecko-fallback symbols (no granular data available).
+    Every current watchlist symbol is on Coinbase, so wick-checks via 1-min
+    candles cover the SL/TP path; the spot-price fallback below remains for
+    legacy/dropped positions cleaned up on next deploy and as a defensive
+    branch if a Coinbase wick fetch fails.
 
     When both SL and TP look hit in the same candle window, conservatively
     assume SL fired first (worst case for trader, matches real-exchange

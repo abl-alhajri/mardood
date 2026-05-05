@@ -15,21 +15,18 @@ FINNHUB_API_KEY     = os.getenv("FINNHUB_API_KEY")
 # ANTHROPIC_API_KEY is read directly via os.getenv in analysis/brain.py
 
 CRYPTO_WATCHLIST = [
-    # Majors on Coinbase (real volume, 4h candles via 1h->4h resample)
+    # All on Coinbase Exchange — real volume, 4h candles via 1h->4h resample.
+    # POL = the rebranded MATIC (Coinbase delisted MATIC-USD when Polygon
+    # migrated tokens; POL-USD is the live successor).
     "BTCUSDT", "SOLUSDT", "XRPUSDT",
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "ADAUSDT",
-    "ARBUSDT", "OPUSDT", "UNIUSDT", "SUIUSDT", "TONUSDT",
-    # POL = the rebranded MATIC. Coinbase delisted MATIC-USD when Polygon
-    # migrated tokens; POL-USD is the live successor.
-    "POLUSDT",
-    # CoinGecko fallback (Coinbase doesn't list these)
-    "BNBUSDT",
-    # TRX: Coinbase US doesn't list it (SEC enforcement on Tron). Routed
-    # to CoinGecko fallback, accepts 30-day 4h candles with zero volume.
-    "TRXUSDT",
-    # NOTE: memes (PEPE/WIF/BONK/FLOKI) and ETH/DOGE/SHIB intentionally
-    # excluded. CoinGecko 429s broke 3/4 memes per scan; 0.2% slippage
-    # tier inverted RR on winners; 80%+ BTC correlation = no diversification.
+    "ARBUSDT", "OPUSDT", "UNIUSDT", "SUIUSDT", "TONUSDT", "POLUSDT",
+    # NOTE: BNB and TRX were dropped — only watchlist symbols still on
+    # CoinGecko, whose free tier rate-limited Railway's shared IPs hard
+    # enough to make TRX miss scans entirely. Both 80%+ BTC-correlated,
+    # so the diversification loss is minimal.
+    # Memes (PEPE/WIF/BONK/FLOKI), ETH, DOGE, SHIB also intentionally
+    # excluded — see commit history for backtest rationale.
 ]
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
