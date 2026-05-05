@@ -78,14 +78,18 @@ FEE_PCT_PER_SIDE  = 0.001    # 0.1% (Coinbase taker)
 SLIPPAGE_PCT      = 0.0005   # 0.05% per side for liquid majors
 
 BASE_DIR    = pathlib.Path(__file__).parent
-MEMORY_DB   = BASE_DIR / "memory" / "xyztradingae.db"
+# DATA_DIR is the persistent volume mount on Railway (/data via env var).
+# Falls back to the in-repo memory/ folder for local dev where the env
+# var isn't set. The DB lives inside DATA_DIR so it survives redeploys.
+DATA_DIR    = pathlib.Path(os.getenv("DATA_DIR", BASE_DIR / "memory"))
+MEMORY_DB   = DATA_DIR / "xyztradingae.db"
 LOGS_DIR    = BASE_DIR / "logs"
 REPORTS_DIR = BASE_DIR / "reports" / "output"
 
 # Rebrand migration: rename the legacy mardood.db -> xyztradingae.db once.
 # Runs at the first config import in any process. Safe and idempotent.
-_legacy_db = BASE_DIR / "memory" / "mardood.db"
+_legacy_db = DATA_DIR / "mardood.db"
 if _legacy_db.exists() and not MEMORY_DB.exists():
-    MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     _legacy_db.rename(MEMORY_DB)
     print(f"[config] DB migrated: {_legacy_db.name} -> {MEMORY_DB.name}", flush=True)

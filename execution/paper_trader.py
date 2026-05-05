@@ -5,6 +5,7 @@ Simulates real trades with virtual $10,000.
 Models taker fees + per-symbol slippage, ATR-sized stops, concurrent
 position caps (meme coins as one bucket), and a daily drawdown halt.
 """
+import pathlib
 import sqlite3
 from datetime import datetime, timezone
 from config import (
@@ -56,6 +57,17 @@ def _ensure_column(conn, table: str, col: str, col_def: str):
 
 def init_paper_trading():
     """Create tables and apply schema migrations."""
+    # First-deploy bootstrap: when MEMORY_DB points at the persistent
+    # Railway volume (DATA_DIR=/data) but the volume is fresh, seed it
+    # with the most recent in-repo DB so we don't start from zero state.
+    # Idempotent — once MEMORY_DB exists on the volume this is a no-op.
+    _legacy_repo_db = pathlib.Path(__file__).parent.parent / "memory" / "xyztradingae.db"
+    if not MEMORY_DB.exists() and _legacy_repo_db.exists() and _legacy_repo_db != MEMORY_DB:
+        import shutil
+        MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_legacy_repo_db, MEMORY_DB)
+        print(f"[paper_trader] Bootstrapped DB from {_legacy_repo_db} -> {MEMORY_DB}", flush=True)
+
     with get_conn() as conn:
         # WAL mode lets the dashboard read while the scanner writes without
         # 'database is locked' errors. Persists per database file.
