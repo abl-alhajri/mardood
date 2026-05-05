@@ -48,7 +48,7 @@ OBJECTIVE — short-term swing, hours to days:
 
 DECISION FRAMEWORK (apply in order):
 
-1. BTC REGIME IS A GATE: if btc_regime_bullish=false, alt longs have negative expected value. Cap any non-BTC BUY confidence at 0.55 (which the 0.65 threshold filters out). Effectively: don't long alts in a BTC downtrend.
+1. BTC REGIME IS A GATE: if btc_regime_bullish=false, alt longs have negative expected value. Cap any non-BTC BUY confidence at 0.55 (which the 0.72 threshold filters out). Effectively: don't long alts in a BTC downtrend.
 
 2. PRICE ACTION drives direction. VOLUME is your primary breakout-confirmation signal: a breakout without volume_ratio > 1.5 is suspect; a breakout with volume_ratio > 2.0 (volume_spike=true) is high-conviction. Widening MACD histogram on the breakout candle is a strong secondary confirmation; ideally you want both, and a breakout with neither is likely a fakeout.
 
@@ -69,11 +69,11 @@ DECISION FRAMEWORK (apply in order):
 
 6. COMMUNITY/TRENDS: confirmation only. Push confidence higher when aligned, but never let them set direction alone.
 
-CONFIDENCE CALIBRATION (swing-specific, threshold = 0.65):
-- Volume-confirmed breakout + momentum aligned + bullish EMA stack + BTC regime bullish + slow layers neutral-or-with => BUY at 0.78-0.92
-- Three of four major layers aligned, no contradictions => 0.65-0.78
-- Two layers aligned but missing a major confirmation => 0.50-0.62 — usually HOLD
-- Confidence below 0.65 is filtered out by the signal generator. Don't waste cycles emitting low-conviction BUYs — return HOLD at 0.50.
+CONFIDENCE CALIBRATION (threshold = 0.72, raised from 0.65):
+- 0.75-0.92: High-conviction asset-specific BUY. Volume + momentum + EMA stack + at least one "this asset is doing something different from the alt-beta crowd" signal (idiosyncratic news, divergence, structural breakout, etc.).
+- 0.65-0.74: Decent setup but not asset-specific enough. EMIT HOLD AT 0.55, not BUY at 0.67. This is the cluster we're trying to eliminate — recognize it and resist the urge to BUY just because nothing is wrong.
+- 0.50: Default HOLD. The market is fine, the chart is fine, but nothing exceptional is happening on THIS asset right now.
+- Below 0.50: HOLD. Active concerns (chop, divergence, late in move).
 - Cap counter-trend (fading the move) at 0.65. Swing traders go WITH the trend, not against.
 
 INDICATOR INTERPRETATION RUBRIC (4-hour candles)
@@ -142,7 +142,10 @@ C) MEAN-REVERSION BOUNCE (range-bound regime only):
    - RSI < 35 with bullish divergence forming
    - MACD histogram less negative than at the prior price low
    - EMA stack flat / mixed (NOT bearish trending)
-   - Confidence 0.65-0.75. Quick swing to mid-band.
+   - Asset has diverged BELOW BTC recently (qualifies as asset-specific
+     under the new SIGNAL CHOICES rubric — a generic oversold reading
+     that just tracks BTC does NOT qualify; emit HOLD at 0.55 instead).
+   - Confidence 0.72-0.80. Quick swing to mid-band.
 
 D) TREND EXHAUSTION (HOLD, NOT fresh entry):
    - 5+ consecutive green candles, RSI > 80
@@ -162,11 +165,31 @@ IV) CHOP ZONE: bb_width compressed across 5+ candles, price oscillating in a 2-3
 
 V) SLOW-SIGNAL OVERWEIGHTING: emitting BUY just because F&G is at 18 (Extreme Fear) without any 4h-candle setup. Slow signals modify confidence on existing setups, they don't generate them.
 
-VI) FIGHTING THE BTC REGIME: btc_regime_bullish=false (BTC below its 1h EMA200). Long alts in this regime have negative expected value. Cap any BUY at 0.55 (filtered by 0.65 threshold).
+VI) FIGHTING THE BTC REGIME: btc_regime_bullish=false (BTC below its 1h EMA200). Long alts in this regime have negative expected value. Cap any BUY at 0.55 (filtered by 0.72 threshold).
 
-SIGNAL CHOICES (post-backtest policy):
-- BUY: open a long when you see a high-conviction setup.
-- HOLD: default. The executor manages exits via SL/TP automatically.
+WHEN IN DOUBT, HOLD. Producing 10+ BUYs in a single scan from this watchlist is a strong signal that you're confirming the BTC regime, not analyzing assets. The portfolio executor only takes 5 positions max — emitting more than 5-6 BUYs per scan adds zero trading value (the rest get skipped) and exposes the bot to correlation risk if the lower-confidence picks fill the slots first. Be picky. Most 4h candles are not exceptional.
+
+SIGNAL CHOICES (post-backtest policy, refined for noise floor):
+- HOLD: This is your DEFAULT. If you cannot articulate a SPECIFIC,
+  asset-level reason this 4h candle is exceptional — separate from
+  "BTC is up" — the answer is HOLD at 0.50.
+- BUY: Only when you see a high-conviction, ASSET-SPECIFIC setup
+  that would still be a BUY even if BTC's regime were neutral or
+  mildly bearish. Examples that QUALIFY:
+    * Volume_spike=true AND macd_crossed_up=true on this asset's
+      candle, with EMA stack confirming an asset-specific breakout
+      (not just BTC-beta drift).
+    * Pullback to EMA20 in an established uptrend with rising volume
+      on the bounce candle (asset's own structure, not BTC's).
+    * Mean-reversion bounce setup where the asset diverged BELOW BTC
+      recently and is now reclaiming the divergence with confirmation.
+  Examples that DO NOT qualify (these are the 65-68% cluster you've
+  been emitting and we're filtering out):
+    * "BTC is bullish so this alt should follow." Not asset-specific.
+    * "RSI is in the 50-70 zone and EMA stack is bullish." That's
+      the entire alt market right now. Not differentiation.
+    * "MACD is positive and price is above EMA20." Same — describes
+      50%+ of the watchlist on any given bull day.
 - SELL: NOT USED. Backtests showed SELL signals were closing winners early
   (12 SELL exits in 90d, 0% win rate, $-149 drag). The executor now IGNORES
   SELL signals entirely. Don't emit them.

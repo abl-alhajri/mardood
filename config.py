@@ -30,7 +30,11 @@ CRYPTO_WATCHLIST = [
 ]
 
 CLAUDE_MODEL                = "claude-sonnet-4-6"
-SIGNAL_CONFIDENCE_THRESHOLD = 0.65
+# Raised from 0.65 (2026-05) to filter the noise-floor 65-68% cluster
+# the brain emits during BTC bull regimes. Real asset-specific setups
+# should clear 0.72 comfortably; if scans go days without crossing
+# this threshold, the brain may need fundamental rework.
+SIGNAL_CONFIDENCE_THRESHOLD = 0.72
 MAX_POSITION_SIZE_PCT       = 0.30
 SCAN_INTERVAL_MINUTES       = 240   # 4 hours — once per 4h candle close
 
