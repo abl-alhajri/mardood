@@ -2,6 +2,7 @@
 memory/*.db
 memory/*.db-wal
 memory/*.db-shm
+memory/correlations.json
 __pycache__/
 *.pyc
 venv/
