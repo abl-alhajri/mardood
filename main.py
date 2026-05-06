@@ -165,7 +165,17 @@ def run_scan():
             # diagnostic info instead of going silent).
             try:
                 perf = get_performance_summary()
-                console.print(f"\n[dim]Portfolio: ${perf['portfolio_value']} | Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/dim]")
+                pnl_emoji = "📈" if perf['total_pnl'] > 0 else ("📉" if perf['total_pnl'] < 0 else "➡️")
+                pnl_color = "green" if perf['total_pnl'] > 0 else ("red" if perf['total_pnl'] < 0 else "dim")
+                console.print(
+                    f"\n[{pnl_color}]{pnl_emoji} Portfolio: ${perf['portfolio_value']} "
+                    f"({perf['total_return_pct']:+.2f}%) | "
+                    f"Cash: ${perf['cash']} + Open: ${perf['open_position_value']} | "
+                    f"Realized: ${perf['realized_pnl']} | Unrealized: ${perf['unrealized_pnl']} | "
+                    f"Trades: {perf['total_trades']} | Win rate: {perf['win_rate']}%[/{pnl_color}]"
+                )
+                if perf.get('open_positions_failed', 0) > 0:
+                    console.print(f"[yellow]  ⚠ {perf['open_positions_failed']} position(s) using entry-price fallback (live price fetch failed)[/yellow]")
             except Exception as e:
                 console.print(f"\n[red]Portfolio summary unavailable: {e}[/red]")
 
@@ -197,13 +207,27 @@ def run_scan():
 def show_stats():
     perf = get_performance_summary()
 
+    return_color = "green" if perf['total_return_pct'] > 0 else ("red" if perf['total_return_pct'] < 0 else "white")
+    pnl_color = "green" if perf['total_pnl'] > 0 else ("red" if perf['total_pnl'] < 0 else "white")
+    unreal_color = "green" if perf['unrealized_pnl'] > 0 else ("red" if perf['unrealized_pnl'] < 0 else "white")
+
+    lines = [
+        f"[bold]💰 Portfolio Value:[/bold] ${perf['portfolio_value']} "
+        f"[{return_color}]({perf['total_return_pct']:+.2f}%)[/{return_color}]",
+        f"[bold]💵 Cash:[/bold] ${perf['cash']}",
+        f"[bold]📦 Open Position Value:[/bold] ${perf['open_position_value']}",
+        f"[bold]📊 Total Trades:[/bold] {perf['total_trades']}",
+        f"[bold]✅ Wins:[/bold] {perf['wins']} | [bold]❌ Losses:[/bold] {perf['losses']}",
+        f"[bold]🎯 Win Rate:[/bold] {perf['win_rate']}%",
+        f"[bold]💵 Realized P&L:[/bold] ${perf['realized_pnl']}",
+        f"[bold]🟡 Unrealized P&L:[/bold] [{unreal_color}]${perf['unrealized_pnl']}[/{unreal_color}]",
+        f"[bold]💹 Total P&L:[/bold] [{pnl_color}]${perf['total_pnl']}[/{pnl_color}]",
+    ]
+    if perf.get('open_positions_failed', 0) > 0:
+        lines.append(f"[yellow]⚠ {perf['open_positions_failed']} position(s) using entry-price fallback[/yellow]")
+
     console.print(Panel.fit(
-        f"[bold]💰 Portfolio Value:[/bold] ${perf['portfolio_value']}\n"
-        f"[bold]💵 Cash:[/bold] ${perf['cash']}\n"
-        f"[bold]📊 Total Trades:[/bold] {perf['total_trades']}\n"
-        f"[bold]✅ Wins:[/bold] {perf['wins']} | [bold]❌ Losses:[/bold] {perf['losses']}\n"
-        f"[bold]🎯 Win Rate:[/bold] {perf['win_rate']}%\n"
-        f"[bold]💹 Total P&L:[/bold] ${perf['total_pnl']}",
+        "\n".join(lines),
         title="XYZTradingAE Performance",
         border_style="cyan"
     ))

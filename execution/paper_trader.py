@@ -457,21 +457,56 @@ def check_stop_loss_take_profit(current_prices: dict) -> list:
 
 
 def get_performance_summary() -> dict:
+    from data.crypto.fetcher import get_live_price
+
     portfolio = get_portfolio()
     with get_conn() as conn:
         trades = conn.execute("SELECT * FROM trade_history").fetchall()
 
-    total_pnl = sum(t[6] for t in trades) if trades else 0
+    realized_pnl = sum(t[6] for t in trades) if trades else 0
+
+    # Mark-to-market: fetch live prices for each open position. Apply
+    # exit-side friction so portfolio_value reflects what would actually
+    # be realized if positions closed right now (not paper-perfect mid).
+    # Fall back to entry-cost on fetch failure so a single dead-price
+    # symbol doesn't silently hide the rest of the portfolio.
+    unrealized_pnl = 0.0
+    open_value = 0.0
+    priced_count = 0
+    failed_count = 0
+    for pos in portfolio["positions"]:
+        try:
+            current = get_live_price(pos["symbol"])
+            friction = _friction_per_side(pos["symbol"])
+            proceeds_now = pos["quantity"] * current * (1 - friction)
+            entry_cost = pos.get("entry_cost") or (pos["quantity"] * pos["entry_price"])
+            open_value += proceeds_now
+            unrealized_pnl += (proceeds_now - entry_cost)
+            priced_count += 1
+        except Exception:
+            fallback = pos.get("entry_cost") or (pos["quantity"] * pos["entry_price"])
+            open_value += fallback
+            failed_count += 1
+
     win_rate = (portfolio["wins"] / portfolio["total_trades"] * 100) if portfolio["total_trades"] > 0 else 0
+    portfolio_value = round(portfolio["cash"] + open_value, 2)
+    starting_cash = 10000.0
+    total_return_pct = round((portfolio_value - starting_cash) / starting_cash * 100, 2)
 
     return {
-        "cash":            round(portfolio["cash"], 2),
-        "total_trades":    portfolio["total_trades"],
-        "wins":            portfolio["wins"],
-        "losses":          portfolio["losses"],
-        "win_rate":        round(win_rate, 1),
-        "total_pnl":       round(total_pnl, 2),
-        "portfolio_value": round(portfolio["cash"] + total_pnl, 2),
+        "cash":                  round(portfolio["cash"], 2),
+        "total_trades":          portfolio["total_trades"],
+        "wins":                  portfolio["wins"],
+        "losses":                portfolio["losses"],
+        "win_rate":              round(win_rate, 1),
+        "realized_pnl":          round(realized_pnl, 2),
+        "unrealized_pnl":        round(unrealized_pnl, 2),
+        "total_pnl":             round(realized_pnl + unrealized_pnl, 2),
+        "open_position_value":   round(open_value, 2),
+        "open_positions_priced": priced_count,
+        "open_positions_failed": failed_count,
+        "portfolio_value":       portfolio_value,
+        "total_return_pct":      total_return_pct,
     }
 
 
