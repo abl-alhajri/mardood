@@ -12,7 +12,6 @@ from config import (
     MAX_CONCURRENT_POSITIONS,
 )
 from signals.generator import run_full_scan
-from alerts.notifier import send_signals, send_telegram
 from memory.trade_log import log_signals
 from execution.paper_trader import (
     execute_paper_trade,
@@ -22,6 +21,13 @@ from execution.paper_trader import (
 )
 from data.crypto.fetcher import get_live_price
 from analysis.correlation import get_correlation_matrix, correlation
+from bot.telegram_bot import (
+    send_signal_alert,
+    send_trade_alert,
+    send_exit_alert,
+    send_portfolio_summary,
+    start_polling_thread,
+)
 
 console = Console()
 
@@ -60,7 +66,7 @@ def run_scan():
             for ex in exits:
                 emoji = "✅" if ex["pnl"] > 0 else "❌"
                 console.print(f"  [{('green' if ex['pnl'] > 0 else 'red')}]{emoji} EXIT {ex['symbol']} | PnL: ${ex['pnl']} ({ex['reason']})[/]")
-                send_telegram(f"📝 *Auto-Exit*\n{emoji} {ex['symbol']} | PnL: *${ex['pnl']}* ({ex['pnl_pct']}%)\nReason: {ex['reason']}")
+                send_exit_alert(ex["symbol"], ex["pnl"], ex["reason"], pnl_pct=ex.get("pnl_pct"))
 
     signals = run_full_scan()
 
@@ -134,7 +140,18 @@ def run_scan():
 
         console.print(f"\n[green]✓ {len(signals)} signal(s) above threshold[/green]")
         log_signals(signals)
-        send_signals(signals)
+
+        # ★ alerts — one per symbol per scan (the loop already iterates each
+        # symbol once, so no extra dedup needed). Kept above the trade-execution
+        # block so the user sees the signal even when the position is later
+        # SKIPPED (e.g. max-concurrent or daily-drawdown halt).
+        for sig in signals:
+            send_signal_alert(
+                symbol=sig.get("symbol"),
+                confidence=sig.get("confidence", 0),
+                signal_type=sig.get("signal", "?"),
+                risk_level=sig.get("risk_level"),
+            )
 
         # Paper trading — skipped in SHADOW_MODE
         if XYZTRADINGAE_PHASE >= 2 and not SHADOW_MODE:
@@ -150,12 +167,13 @@ def run_scan():
                 sym = result["symbol"]
                 if action == "OPENED":
                     console.print(f"  [green]+ BOUGHT {sym} @ ${price:.6f}[/green]")
-                    send_telegram(f"📝 *Paper Trade*\n🟢 BOUGHT {sym} @ ${price}\nStop: ${result['stop_loss']} | Target: ${result['take_profit']}")
+                    send_trade_alert("BUY", sym, price,
+                                     reason=f"Stop ${result['stop_loss']} | Target ${result['take_profit']}")
                 elif action == "CLOSED":
                     pnl = result["pnl"]
                     emoji = "✅" if pnl > 0 else "❌"
                     console.print(f"  [{('green' if pnl > 0 else 'red')}]{emoji} CLOSED {sym} | PnL: ${pnl}[/]")
-                    send_telegram(f"📝 *Paper Trade Closed*\n{emoji} {sym} | PnL: *${pnl}* ({result['pnl_pct']}%)\nReason: {result['reason']}")
+                    send_exit_alert(sym, pnl, result["reason"], pnl_pct=result.get("pnl_pct"))
                 elif action == "SKIPPED":
                     console.print(f"  [dim]· skipped {sym}: {result['reason']}[/dim]")
 
@@ -178,6 +196,14 @@ def run_scan():
                     console.print(f"[yellow]  ⚠ {perf['open_positions_failed']} position(s) using entry-price fallback (live price fetch failed)[/yellow]")
             except Exception as e:
                 console.print(f"\n[red]Portfolio summary unavailable: {e}[/red]")
+
+            # Telegram portfolio snapshot — fires once per scan after trades
+            # have settled. Wrapped so a Telegram outage never crashes the
+            # scanner.
+            try:
+                send_portfolio_summary()
+            except Exception as e:
+                console.print(f"[yellow]  ⚠ Telegram portfolio summary failed: {e}[/yellow]")
 
             # Effective BTC exposure: sum of positive BTC correlations across
             # currently-open positions. >3.5x on a 5-position portfolio is
@@ -248,6 +274,11 @@ def main():
     if args.once:
         run_scan()
         return
+
+    # Telegram command bot — daemon thread, no-op if env vars missing.
+    # Started before the first scan so /status etc. answer immediately even
+    # while the initial scan is still running.
+    start_polling_thread()
 
     schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(run_scan)
     console.print(f"[green]✓ XYZTradingAE is live[/green] — scanning every {SCAN_INTERVAL_MINUTES} min")

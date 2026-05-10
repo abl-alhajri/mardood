@@ -23,4 +23,9 @@ schedule>=1.2.1
 pytz>=2024.1
 rich>=13.7.0
 
+# Telegram command bot (outbound alerts use raw HTTP via requests in
+# alerts/notifier.py; this dep is purely for the polling Application
+# that handles /status, /positions, /signals, /portfolio).
+python-telegram-bot==21.7
+
 # SQLite is built into Python — no extra install needed.

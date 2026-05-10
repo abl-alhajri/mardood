@@ -29,7 +29,18 @@ volume at `/data`.
   drawdown halt, fee+slippage modelling, mark-to-market summaries.
 - `memory/` — SQLite DB (`xyztradingae.db`), trade log, shadow decisions,
   correlations cache.
-- `alerts/notifier.py` — Telegram delivery.
+- `alerts/notifier.py` — low-level Telegram transport (raw HTTP via
+  `requests`).
+- `bot/telegram_bot.py` — sync outbound formatters
+  (`send_signal_alert`, `send_trade_alert`, `send_exit_alert`,
+  `send_portfolio_summary`) plus a `python-telegram-bot` Application that
+  serves `/start /status /positions /signals /portfolio /help`. Polling
+  runs in a daemon thread started from `main.py` with
+  `run_polling(stop_signals=None)` so PTB doesn't try to install signal
+  handlers off the main thread. Commands are gated to `TELEGRAM_CHAT_ID`;
+  any other chat is silently ignored. If either Telegram env var is
+  missing, the polling thread is skipped and the trading loop runs
+  normally.
 
 ## Risk Profile
 
